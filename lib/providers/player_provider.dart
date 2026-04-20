@@ -1,0 +1,149 @@
+import 'package:flutter/foundation.dart';
+import 'package:just_audio/just_audio.dart';
+import '../models/music.dart';
+import '../services/database_service.dart';
+
+/// 播放模式枚举
+enum PlayMode {
+  singleLoop, // 单曲循环
+  listOrder,  // 列表顺序播放
+  listLoop,   // 列表循环播放
+}
+
+/// 播放器状态管理类
+class PlayerProvider with ChangeNotifier {
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final DatabaseService _dbService = DatabaseService();
+
+  List<Music> _playlist = [];
+  int _currentIndex = -1;
+  PlayMode _playMode = PlayMode.listLoop;
+  bool _isImmersive = false;
+
+  // Getters
+  AudioPlayer get audioPlayer => _audioPlayer;
+  List<Music> get playlist => _playlist;
+  int get currentIndex => _currentIndex;
+  Music? get currentMusic => _currentIndex >= 0 && _currentIndex < _playlist.length ? _playlist[_currentIndex] : null;
+  PlayMode get playMode => _playMode;
+  bool get isImmersive => _isImmersive;
+  bool get isPlaying => _audioPlayer.playing;
+
+  PlayerProvider() {
+    _initPlayer();
+    loadPlaylist();
+  }
+
+  /// 初始化播放器监听
+  void _initPlayer() {
+    _audioPlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        _handleSongCompleted();
+      }
+      notifyListeners();
+    });
+  }
+
+  /// 加载播放列表
+  Future<void> loadPlaylist() async {
+    _playlist = await _dbService.getAllMusics();
+    notifyListeners();
+  }
+
+  /// 播放指定索引的音乐
+  Future<void> playAt(int index) async {
+    if (index < 0 || index >= _playlist.length) return;
+
+    _currentIndex = index;
+    final music = _playlist[index];
+    
+    try {
+      await _audioPlayer.setFilePath(music.path);
+      await _audioPlayer.play();
+    } catch (e) {
+      print('播放失败: $e');
+    }
+    notifyListeners();
+  }
+
+  /// 播放/暂停切换
+  Future<void> togglePlayPause() async {
+    if (_audioPlayer.playing) {
+      await _audioPlayer.pause();
+    } else {
+      if (_currentIndex == -1 && _playlist.isNotEmpty) {
+        await playAt(0);
+      } else {
+        await _audioPlayer.play();
+      }
+    }
+    notifyListeners();
+  }
+
+  /// 上一首
+  Future<void> playPrevious() async {
+    if (_playlist.isEmpty) return;
+    
+    int newIndex;
+    if (_playMode == PlayMode.listOrder && _currentIndex == 0) {
+      return; // 列表顺序播放且是第一首时不操作
+    } else {
+      newIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
+    }
+    await playAt(newIndex);
+  }
+
+  /// 下一首
+  Future<void> playNext() async {
+    if (_playlist.isEmpty) return;
+
+    int newIndex;
+    if (_playMode == PlayMode.listOrder && _currentIndex == _playlist.length - 1) {
+      return; // 列表顺序播放且是最后一首时不操作
+    } else {
+      newIndex = (_currentIndex + 1) % _playlist.length;
+    }
+    await playAt(newIndex);
+  }
+
+  /// 切换播放模式
+  void togglePlayMode() {
+    switch (_playMode) {
+      case PlayMode.singleLoop:
+        _playMode = PlayMode.listOrder;
+        _audioPlayer.setLoopMode(LoopMode.off);
+        break;
+      case PlayMode.listOrder:
+        _playMode = PlayMode.listLoop;
+        _audioPlayer.setLoopMode(LoopMode.all);
+        break;
+      case PlayMode.listLoop:
+        _playMode = PlayMode.singleLoop;
+        _audioPlayer.setLoopMode(LoopMode.one);
+        break;
+    }
+    notifyListeners();
+  }
+
+  /// 处理歌曲播放完成
+  void _handleSongCompleted() {
+    if (_playMode == PlayMode.singleLoop) {
+      _audioPlayer.seek(Duration.zero);
+      _audioPlayer.play();
+    } else if (_playMode == PlayMode.listLoop || _currentIndex < _playlist.length - 1) {
+      playNext();
+    }
+  }
+
+  /// 切换沉浸式模式
+  void toggleImmersive(bool value) {
+    _isImmersive = value;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+}
