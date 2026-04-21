@@ -60,6 +60,7 @@ class MediaScanner {
     try {
       final directory = Directory(dirPath);
       if (!directory.existsSync()) {
+        print('[SCAN] ❌ 目录不存在: $dirPath');
         return;
       }
 
@@ -69,31 +70,34 @@ class MediaScanner {
       }
 
       final entities = directory.listSync(recursive: false);
+      print('[SCAN] 📂 目录 ${path.basename(dirPath)} 包含 ${entities.length} 个项目');
       
       for (var entity in entities) {
         if (entity is Directory) {
+          print('[SCAN] 📁 发现子目录: ${path.basename(entity.path)}');
           // 再次校验子目录是否在根路径下（处理符号链接情况）
           if (entity.path.startsWith(rootPath)) {
             await _scanDirectoryRecursive(entity.path, depth + 1, musics, processedPaths, rootPath);
           }
         } else if (entity is File) {
+          print('[SCAN] 📄 发现文件: ${path.basename(entity.path)}');
           if (entity.path.endsWith('entry.json') && entity.path.startsWith(rootPath)) {
-            print('[SCAN] >>> 发现 entry.json: ${entity.path}');
+            print('[SCAN] ✅ 发现 entry.json: ${entity.path}');
             await _processEntryFile(entity, musics, processedPaths);
           }
         }
       }
-    } catch (e) {
-      if (e.toString().contains('Permission denied')) {
-        return;
-      }
-      print('[SCAN] 扫描出错: $dirPath, 错误: $e');
+    } catch (e, stackTrace) {
+      print('[SCAN] 💥 扫描出错: $dirPath');
+      print('[SCAN] 错误详情: $e');
+      print('[SCAN] 堆栈: $stackTrace');
     }
   }
 
   /// 处理 entry.json 文件
   Future<void> _processEntryFile(File entryFile, List<Music> musics, Set<String> processedPaths) async {
     try {
+      print('[SCAN] 🔍 开始解析: ${entryFile.path}');
       final content = await entryFile.readAsString();
       final jsonMap = jsonDecode(content) as Map<String, dynamic>;
 
@@ -101,13 +105,16 @@ class MediaScanner {
       final coverUrl = jsonMap['cover']?.toString();
       final author = jsonMap['owner_name']?.toString() ?? '未知作者';
 
+      print('[SCAN] 🎵 标题: $title, 作者: $author');
+
       // 尝试在同级目录或子目录查找 audio.m4s
       String? audioPath = await _findAudioFile(entryFile.parent);
 
       if (audioPath != null) {
+        print('[SCAN] 🎧 找到音频文件: $audioPath');
         // 内存去重：如果这个音频路径在本次扫描中已经处理过，则跳过
         if (processedPaths.contains(audioPath)) {
-          print('[SCAN] 跳过重复路径: $audioPath');
+          print('[SCAN] ⚠️ 跳过重复路径: $audioPath');
           return;
         }
 
@@ -126,10 +133,10 @@ class MediaScanner {
           print('[SCAN] --- 数据库已存在: $title');
         }
       } else {
-        print('[SCAN] !!! 未找到 audio.m4s 对应文件');
+        print('[SCAN] ❌ 未找到关联的音频文件 (m4s/mp3)');
       }
     } catch (e) {
-      print('[SCAN] 解析 entry.json 失败: $e');
+      print('[SCAN] 💥 解析 entry.json 失败: $e');
     }
   }
 
