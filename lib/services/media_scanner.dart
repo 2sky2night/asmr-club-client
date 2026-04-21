@@ -44,53 +44,108 @@ class MediaScanner {
     int depth, 
     List<Music> musics,
     Set<String> processedPaths,
-    String rootPath, // 传入根路径用于校验
+    String rootPath,
   ) async {
-    if (depth > 5) return;
+    if (depth > 8) return; // 进一步增加深度
 
-    // 安全检查：确保当前路径是根路径的子路径，防止跳出选定的目录
-    if (!dirPath.startsWith(rootPath)) {
-      print('[SCAN] 跳过非子目录路径: $dirPath');
-      return;
-    }
-
-    // 跳过系统敏感目录
-    if (_isSystemDirectory(dirPath)) return;
+    if (!dirPath.startsWith(rootPath) || _isSystemDirectory(dirPath)) return;
 
     try {
       final directory = Directory(dirPath);
-      if (!directory.existsSync()) {
-        print('[SCAN] ❌ 目录不存在: $dirPath');
-        return;
-      }
+      if (!directory.existsSync()) return;
 
-      // 仅在深度较浅时打印目录名，避免刷屏
-      if (depth <= 2) {
-        print('[SCAN] 正在扫描: $dirPath');
-      }
+      if (depth <= 2) print('[SCAN] 正在扫描: $dirPath');
 
       final entities = directory.listSync(recursive: false);
-      print('[SCAN] 📂 目录 ${path.basename(dirPath)} 包含 ${entities.length} 个项目');
       
       for (var entity in entities) {
         if (entity is Directory) {
-          print('[SCAN] 📁 发现子目录: ${path.basename(entity.path)}');
-          // 再次校验子目录是否在根路径下（处理符号链接情况）
-          if (entity.path.startsWith(rootPath)) {
-            await _scanDirectoryRecursive(entity.path, depth + 1, musics, processedPaths, rootPath);
-          }
+          await _scanDirectoryRecursive(entity.path, depth + 1, musics, processedPaths, rootPath);
         } else if (entity is File) {
-          print('[SCAN] 📄 发现文件: ${path.basename(entity.path)}');
-          if (entity.path.endsWith('entry.json') && entity.path.startsWith(rootPath)) {
-            print('[SCAN] ✅ 发现 entry.json: ${entity.path}');
-            await _processEntryFile(entity, musics, processedPaths);
+          final lowerPath = entity.path.toLowerCase();
+          
+          // 1. 如果发现音频文件，尝试向上寻找 entry.json
+          if (lowerPath.endsWith('.mp3') || lowerPath.endsWith('.m4s') || lowerPath.endsWith('audio.m4s')) {
+            await _processAudioFileWithMeta(entity, musics, processedPaths);
           }
         }
       }
-    } catch (e, stackTrace) {
-      print('[SCAN] 💥 扫描出错: $dirPath');
-      print('[SCAN] 错误详情: $e');
-      print('[SCAN] 堆栈: $stackTrace');
+    } catch (e) {
+      // 忽略单个目录的错误，继续扫描其他目录
+    }
+  }
+
+  /// 处理音频文件并尝试关联元数据
+  Future<void> _processAudioFileWithMeta(File audioFile, List<Music> musics, Set<String> processedPaths) async {
+    final audioPath = audioFile.path;
+    if (processedPaths.contains(audioPath)) return;
+
+    // 向上最多查找 3 层父目录寻找 entry.json
+    Directory? currentDir = audioFile.parent;
+    Map<String, dynamic>? meta;
+    
+    for (int i = 0; i < 3; i++) {
+      if (currentDir == null) break;
+      final entryFile = File(path.join(currentDir.path, 'entry.json'));
+      if (entryFile.existsSync()) {
+        try {
+          // 尝试多种编码读取，优先 UTF-8，失败则尝试 latin1
+          String content;
+          try {
+            content = await entryFile.readAsString(encoding: utf8);
+          } catch (_) {
+            content = await entryFile.readAsString(encoding: latin1);
+          }
+          
+          // 清理可能存在的 BOM 头或非标准字符
+          content = content.replaceAll(RegExp(r'[^\x20-\x7E\u4e00-\u9fa5\n\r\t]'), '');
+          
+          meta = jsonDecode(content) as Map<String, dynamic>;
+          print('[SCAN] ✅ 成功解析元数据: ${meta['title']}');
+          break;
+        } catch (e) {
+          print('[SCAN] ⚠️ 解析 entry.json 失败: ${entryFile.path}, 错误: $e');
+        }
+      }
+      currentDir = currentDir.parent;
+    }
+
+    final exists = await _dbService.isMusicExists(audioPath);
+    if (!exists) {
+      processedPaths.add(audioPath);
+      musics.add(Music(
+        title: meta?['title']?.toString() ?? path.basenameWithoutExtension(audioPath),
+        path: audioPath,
+        coverUrl: meta?['cover']?.toString(),
+        author: meta?['owner_name']?.toString() ?? '本地音乐',
+      ));
+      print('[SCAN] +++ 成功导入: ${path.basename(audioPath)}');
+    }
+  }
+
+  /// 处理独立的 MP3 文件
+  Future<void> _processStandaloneMp3(File mp3File, List<Music> musics, Set<String> processedPaths) async {
+    try {
+      final audioPath = mp3File.path;
+      
+      // 内存去重
+      if (processedPaths.contains(audioPath)) return;
+
+      // 数据库去重
+      final exists = await _dbService.isMusicExists(audioPath);
+      if (!exists) {
+        processedPaths.add(audioPath);
+        musics.add(Music(
+          title: path.basenameWithoutExtension(mp3File.path), // 使用文件名作为标题
+          path: audioPath,
+          author: '本地音乐',
+        ));
+        print('[SCAN] +++ 成功导入 MP3: ${path.basename(audioPath)}');
+      } else {
+        print('[SCAN] --- 数据库已存在 MP3: ${path.basename(audioPath)}');
+      }
+    } catch (e) {
+      print('[SCAN] 💥 处理 MP3 失败: $e');
     }
   }
 
@@ -141,45 +196,30 @@ class MediaScanner {
   }
 
   /// 在目录及其子目录中查找音频文件
-  Future<String?> _findAudioFile(Directory dir) async {
-    // 1. 优先在同级目录查找 audio.m4s
-    final directAudio = File(path.join(dir.path, 'audio.m4s'));
-    if (directAudio.existsSync()) return directAudio.path;
+  Future<String?> _findAudioFile(Directory dir, {int depth = 0}) async {
+    if (depth > 3) return null; // 限制递归深度，防止性能问题
 
-    // 2. 若没找到，尝试在同级目录查找 .mp3 文件
     try {
       final entities = dir.listSync();
       for (var entity in entities) {
-        if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
-          return entity.path;
+        if (entity is File) {
+          final lowerPath = entity.path.toLowerCase();
+          // 优先找 audio.m4s
+          if (lowerPath.endsWith('audio.m4s')) return entity.path;
+          // 其次找 .mp3
+          if (lowerPath.endsWith('.mp3')) return entity.path;
+        }
+      }
+
+      // 如果当前层没找到，进入子目录继续找
+      for (var entity in entities) {
+        if (entity is Directory) {
+          final result = await _findAudioFile(entity, depth: depth + 1);
+          if (result != null) return result;
         }
       }
     } catch (e) {
       // 忽略读取错误
-    }
-
-    // 3. 若同级还没找到，进入子目录查找 (递归深度限制为 2，防止性能问题)
-    try {
-      final subDirs = dir.listSync().whereType<Directory>();
-      for (var subDir in subDirs) {
-        // 先在子目录找标准的 audio.m4s
-        final subAudio = File(path.join(subDir.path, 'audio.m4s'));
-        if (subAudio.existsSync()) return subAudio.path;
-
-        // 再在子目录找 mp3
-        try {
-          final subEntities = subDir.listSync();
-          for (var entity in subEntities) {
-            if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
-              return entity.path;
-            }
-          }
-        } catch (e) {
-          // 忽略深层目录错误
-        }
-      }
-    } catch (e) {
-      // 忽略子目录访问错误
     }
 
     return null;
