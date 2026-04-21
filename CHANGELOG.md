@@ -1,3 +1,8 @@
+## [unreleased]
+
+### ⚙️ Miscellaneous Tasks
+
+- *(project)* 初始化项目配置文件
 ## [1.0.0] - 2026-04-21
 
 ### 🚀 Features

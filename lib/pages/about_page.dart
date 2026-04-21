@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// 关于页面
 class AboutPage extends StatelessWidget {
@@ -84,8 +85,11 @@ class AboutPage extends StatelessWidget {
   }
 
   Future<String> _getVersion() async {
-    // 在实际项目中，通常会从 package_info_plus 获取
-    // 这里为了保持简单和原生，暂时返回固定值或尝试读取配置
-    return '1.0.0';
+    try {
+      final PackageInfo info = await PackageInfo.fromPlatform();
+      return '${info.version} (${info.buildNumber})';
+    } catch (e) {
+      return '1.0.0 (1)';
+    }
   }
 }
