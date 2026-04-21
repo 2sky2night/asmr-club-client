@@ -133,24 +133,48 @@ class MediaScanner {
     }
   }
 
-  /// 在目录及其一级子目录中查找 audio.m4s
+  /// 在目录及其子目录中查找音频文件
   Future<String?> _findAudioFile(Directory dir) async {
-    // 1. 先找同级
+    // 1. 优先在同级目录查找 audio.m4s
     final directAudio = File(path.join(dir.path, 'audio.m4s'));
     if (directAudio.existsSync()) return directAudio.path;
 
-    // 2. 找子目录 (Bilibili 常见结构: entry.json 所在目录下有一个数字文件夹，里面是 audio.m4s)
+    // 2. 若没找到，尝试在同级目录查找 .mp3 文件
     try {
       final entities = dir.listSync();
       for (var entity in entities) {
-        if (entity is Directory) {
-          final subAudio = File(path.join(entity.path, 'audio.m4s'));
-          if (subAudio.existsSync()) return subAudio.path;
+        if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
+          return entity.path;
+        }
+      }
+    } catch (e) {
+      // 忽略读取错误
+    }
+
+    // 3. 若同级还没找到，进入子目录查找 (递归深度限制为 2，防止性能问题)
+    try {
+      final subDirs = dir.listSync().whereType<Directory>();
+      for (var subDir in subDirs) {
+        // 先在子目录找标准的 audio.m4s
+        final subAudio = File(path.join(subDir.path, 'audio.m4s'));
+        if (subAudio.existsSync()) return subAudio.path;
+
+        // 再在子目录找 mp3
+        try {
+          final subEntities = subDir.listSync();
+          for (var entity in subEntities) {
+            if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
+              return entity.path;
+            }
+          }
+        } catch (e) {
+          // 忽略深层目录错误
         }
       }
     } catch (e) {
       // 忽略子目录访问错误
     }
+
     return null;
   }
 
