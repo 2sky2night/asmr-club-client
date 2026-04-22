@@ -33,6 +33,8 @@
 - 使用 `AudioPlayer` 实例管理播放状态。
 - 支持播放、暂停、跳转、切换上一首/下一首。
 - 监听播放进度并更新 UI。
+- **沉浸式模式**：支持底部迷你播放器与全屏沉浸式播放器切换。
+- **时长格式化**：智能显示音频时长，超过 1 小时自动显示 `HH:MM:SS` 格式。
 
 ### 3.3 数据存储 (`lib/services/database_service.dart`)
 - 使用 SQLite 存储音乐元数据（标题、路径、封面、作者）。
@@ -42,7 +44,14 @@
 - 实现了自定义 `MethodChannel` (`com.example.asmr_club_client/path_resolver`)。
 - **作用**：在 Android 端将 SAF (Storage Access Framework) 的 URI 转换为真实的文件系统路径，解决部分模拟器/真机上 `file_picker` 返回路径不可用的问题。
 
-## 4. 开发与构建规范
+### 3.5 沉浸式播放器 (`lib/widgets/immersive_player.dart`)
+- **跑马灯标题**：长标题自动滚动显示，支持手动拖拽交互。
+- **控制控件**：播放/暂停、上一首/下一首、进度条拖拽。
+- **动画过渡**：展开/收起时带有平滑的缩放动画效果。
+
+### 3.6 应用入口 (`lib/main.dart`)
+- **退出确认**：使用 `PopScope` 拦截返回键，点击退出时弹出二次确认对话框。
+- **安全退出**：使用 `SystemNavigator.pop()` 正确关闭 Android 应用，避免黑屏问题。
 
 ### 4.1 版本管理
 - **版本号定义**：在 `pubspec.yaml` 中定义 `version: x.y.z+build_number`。

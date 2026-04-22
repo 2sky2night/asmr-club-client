@@ -12,9 +12,10 @@
 
 - **本地媒体扫描**：支持指定目录递归扫描，智能识别 Bilibili 缓存视频（`entry.json` + `audio.m4s`）。
 - **隐私安全优先**：采用原生路径解析方案，严格限制扫描范围，杜绝全盘扫描风险。
-- **沉浸式播放**：支持底部迷你播放器与全屏沉浸式播放模式无缝切换。
+- **沉浸式播放**：支持底部迷你播放器与全屏沉浸式播放模式无缝切换，长标题自动跑马灯显示。
 - **持久化存储**：使用 SQLite 数据库管理播放列表，支持断点续播和列表记忆。
 - **多格式支持**：完美支持 `.m4s` 和 `.mp3` 等主流音频格式。
+- **人性化交互**：退出应用二次确认防误触，音频时长智能格式化（HH:MM:SS）。
 - **自动化构建**：集成 GitHub Actions，推送代码即可自动打包 APK。
 
 ## 🛠️ 技术栈
@@ -58,19 +59,19 @@ flutter build apk --release
 
 ```
 lib/
-├── main.dart              # 应用入口
+├── main.dart              # 应用入口（含退出确认逻辑）
 ├── models/                # 数据模型 (Music)
 ├── pages/                 # 页面组件
-│   ├── home_page.dart     # 首页（播放列表+播放器）
+│   ├── home_page.dart     # 首页（播放列表+迷你播放器）
 │   ├── scan_page.dart     # 媒体扫描页
 │   ├── settings_page.dart # 设置页
-│   └── about_page.dart    # 关于页
+│   └── about_page.dart    # 关于页（动态版本显示）
 ├── providers/             # 状态管理 (PlayerProvider)
 ├── services/              # 业务逻辑服务
 │   ├── database_service.dart # SQLite 数据库操作
-│   └── media_scanner.dart    # 媒体文件扫描逻辑
+│   └── media_scanner.dart    # 媒体文件扫描逻辑（原生层优化）
 └── widgets/               # 通用组件
-    └── immersive_player.dart # 沉浸式播放器组件
+    └── immersive_player.dart # 沉浸式播放器（跑马灯标题）
 ```
 
 ## 🔒 隐私与安全
