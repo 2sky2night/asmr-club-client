@@ -187,4 +187,5 @@ adb install app-release.apk
 
 # 调试连接设备（适合真机无法开启 USB 安装）
 adb -s 设备id logcat | Select-String "flutter"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8 # 解决终端输出乱码的日志（调试连接设备（适合真机无法开启 USB 安装））
 ```
