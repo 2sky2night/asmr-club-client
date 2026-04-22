@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import '../models/music.dart';
 import 'database_service.dart';
@@ -7,6 +8,7 @@ import 'database_service.dart';
 /// 媒体扫描服务类
 class MediaScanner {
   final DatabaseService _dbService = DatabaseService();
+  static const platform = MethodChannel('com.example.asmr_club_client/path_resolver');
 
   /// 扫描 Bilibili 缓存目录
   Future<Map<String, int>> scanBilibiliCache(String directoryPath) async {
@@ -38,7 +40,7 @@ class MediaScanner {
     return {'success': successCount, 'failed': failedCount};
   }
 
-  /// 递归扫描目录
+  /// 递归扫描目录（使用原生层列出文件以绕过权限限制）
   Future<void> _scanDirectoryRecursive(
     String dirPath, 
     int depth, 
@@ -46,80 +48,96 @@ class MediaScanner {
     Set<String> processedPaths,
     String rootPath,
   ) async {
-    if (depth > 8) return; // 进一步增加深度
-
+    if (depth > 8) return;
     if (!dirPath.startsWith(rootPath) || _isSystemDirectory(dirPath)) return;
 
     try {
-      final directory = Directory(dirPath);
-      if (!directory.existsSync()) return;
+      // 【核心修复】调用原生层获取文件列表
+      final List<dynamic>? nativeFiles = await platform.invokeMethod('listFilesNative', {'path': dirPath});
+      if (nativeFiles == null) return;
 
-      if (depth <= 2) print('[SCAN] 正在扫描: $dirPath');
+      if (depth <= 2) print('[SCAN] 正在扫描(原生): $dirPath');
 
-      final entities = directory.listSync(recursive: false);
-      
-      for (var entity in entities) {
-        if (entity is Directory) {
-          await _scanDirectoryRecursive(entity.path, depth + 1, musics, processedPaths, rootPath);
-        } else if (entity is File) {
-          final lowerPath = entity.path.toLowerCase();
-          
-          // 1. 如果发现音频文件，尝试向上寻找 entry.json
-          if (lowerPath.endsWith('.mp3') || lowerPath.endsWith('.m4s') || lowerPath.endsWith('audio.m4s')) {
-            await _processAudioFileWithMeta(entity, musics, processedPaths);
+      for (var item in nativeFiles) {
+        final Map<dynamic, dynamic> fileInfo = item;
+        final String filePath = fileInfo['path'];
+        final bool isDir = fileInfo['isDirectory'];
+
+        if (isDir) {
+          await _scanDirectoryRecursive(filePath, depth + 1, musics, processedPaths, rootPath);
+        } else {
+          final lowerPath = filePath.toLowerCase();
+          // 发现音频文件，尝试向上寻找 entry.json
+          if (lowerPath.endsWith('.mp3') || lowerPath.endsWith('audio.m4s')) {
+            await _processAudioFileWithMeta(File(filePath), musics, processedPaths);
           }
+          // 明确忽略 video.m4s 或其他非音频文件
         }
       }
     } catch (e) {
-      // 忽略单个目录的错误，继续扫描其他目录
+      print('[SCAN] 原生扫描出错: $e');
     }
   }
 
-  /// 处理音频文件并尝试关联元数据
+  /// 处理音频文件并尝试关联元数据（使用原生层读取）
   Future<void> _processAudioFileWithMeta(File audioFile, List<Music> musics, Set<String> processedPaths) async {
     final audioPath = audioFile.path;
     if (processedPaths.contains(audioPath)) return;
 
-    // 向上最多查找 3 层父目录寻找 entry.json
     Directory? currentDir = audioFile.parent;
     Map<String, dynamic>? meta;
+    String? bestAudioPath; // 用于记录当前目录下最优的音频路径
     
+    // 1. 向上查找 entry.json 获取元数据
     for (int i = 0; i < 3; i++) {
       if (currentDir == null) break;
-      final entryFile = File(path.join(currentDir.path, 'entry.json'));
-      if (entryFile.existsSync()) {
-        try {
-          // 尝试多种编码读取，优先 UTF-8，失败则尝试 latin1
-          String content;
-          try {
-            content = await entryFile.readAsString(encoding: utf8);
-          } catch (_) {
-            content = await entryFile.readAsString(encoding: latin1);
-          }
-          
-          // 清理可能存在的 BOM 头或非标准字符
-          content = content.replaceAll(RegExp(r'[^\x20-\x7E\u4e00-\u9fa5\n\r\t]'), '');
-          
+      final entryPath = path.join(currentDir.path, 'entry.json');
+      
+      try {
+        final content = await platform.invokeMethod<String>('readEntryJsonNative', {'path': entryPath});
+        if (content != null && content.isNotEmpty) {
           meta = jsonDecode(content) as Map<String, dynamic>;
           print('[SCAN] ✅ 成功解析元数据: ${meta['title']}');
           break;
-        } catch (e) {
-          print('[SCAN] ⚠️ 解析 entry.json 失败: ${entryFile.path}, 错误: $e');
         }
-      }
+      } catch (e) { /* 忽略 */ }
       currentDir = currentDir.parent;
     }
 
-    final exists = await _dbService.isMusicExists(audioPath);
-    if (!exists) {
-      processedPaths.add(audioPath);
-      musics.add(Music(
-        title: meta?['title']?.toString() ?? path.basenameWithoutExtension(audioPath),
-        path: audioPath,
-        coverUrl: meta?['cover']?.toString(),
-        author: meta?['owner_name']?.toString() ?? '本地音乐',
-      ));
-      print('[SCAN] +++ 成功导入: ${path.basename(audioPath)}');
+    // 2. 确定当前目录下应该导入哪个音频文件（优先级：audio.m4s > mp3）
+    // 如果当前扫描到的是 audio.m4s，直接导入
+    if (audioPath.toLowerCase().endsWith('audio.m4s')) {
+      bestAudioPath = audioPath;
+    } 
+    // 如果当前扫描到的是 mp3，需要检查同级目录下是否有 audio.m4s
+    else if (audioPath.toLowerCase().endsWith('.mp3')) {
+      final dirPath = audioFile.parent.path;
+      final potentialM4s = path.join(dirPath, 'audio.m4s');
+      
+      // 通过原生层确认 audio.m4s 是否存在
+      final m4sExists = await platform.invokeMethod<bool>('readEntryJsonNative', {'path': potentialM4s}) != null || 
+                        File(potentialM4s).existsSync(); // 兜底检查
+      
+      if (!m4sExists) {
+        bestAudioPath = audioPath;
+      } else {
+        print('[SCAN] ⏭️ 跳过 MP3，因为同目录存在 audio.m4s: $potentialM4s');
+      }
+    }
+
+    // 3. 执行导入
+    if (bestAudioPath != null && !processedPaths.contains(bestAudioPath)) {
+      final exists = await _dbService.isMusicExists(bestAudioPath);
+      if (!exists) {
+        processedPaths.add(bestAudioPath);
+        musics.add(Music(
+          title: meta?['title']?.toString() ?? path.basenameWithoutExtension(bestAudioPath),
+          path: bestAudioPath,
+          coverUrl: meta?['cover']?.toString(),
+          author: meta?['owner_name']?.toString() ?? '本地音乐',
+        ));
+        print('[SCAN] +++ 成功导入: ${path.basename(bestAudioPath)}');
+      }
     }
   }
 
