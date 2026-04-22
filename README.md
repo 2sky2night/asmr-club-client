@@ -81,6 +81,41 @@ lib/
 2. **路径校验**：通过原生层校验真实路径，防止模拟器环境下的路径欺骗导致的越权访问。
 3. **本地化处理**：所有元数据解析和播放均在本地完成，不上传任何用户数据。
 
+## 📋 版本管理规范
+
+### 版本号格式
+采用语义化版本控制（Semantic Versioning），格式为 **主版本号.次版本号.修订号+构建号**（`Major.Minor.Patch+Build`）。
+
+- **主版本号 (Major)**：不兼容的 API 修改、重大功能重构或界面整体改版时递增。
+- **次版本号 (Minor)**：新增向下兼容的功能或日常迭代优化时递增。
+- **修订号 (Patch)**：仅修复向下兼容的 Bug 或微小调整时递增。
+- **构建号 (Build)**：每次打包递增，用于 Android `versionCode` 和 iOS `CFBundleVersion`，用户不可见。
+
+**示例：**
+- `0.0.1+1` → `0.0.2+2` → `0.1.0+3` → `1.0.0+4`
+
+### 发布流程
+1. **创建 Git 标签**：
+   ```bash
+   git tag v0.0.2
+   git push origin v0.0.2
+   ```
+
+2. **生成更新日志**：
+   ```bash
+   git-cliff -o CHANGELOG.md
+   ```
+
+3. **更新 pubspec.yaml**：
+   修改 `version: 0.0.2+2`（版本号与标签对应，构建号递增）。
+
+4. **推送代码**：
+   ```bash
+   git add .
+   git commit -m "chore: bump version to v0.0.2"
+   git push
+   ```
+
 ## 🤝 贡献
 
 欢迎提交 Issue 或 Pull Request！
