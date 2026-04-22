@@ -45,8 +45,14 @@ class _HomePageState extends State<HomePage> {
                                 leading: ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
                                   child: music.coverUrl != null && music.coverUrl!.isNotEmpty
-                                      ? Image.network(music.coverUrl!, width: 50, height: 50, fit: BoxFit.cover)
-                                      : Container(width: 50, height: 50, color: Colors.grey[300]),
+                                      ? Image.network(
+                                          music.coverUrl!,
+                                          width: 50,
+                                          height: 50,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => _buildPlaceholderCover(context, size: 50),
+                                        )
+                                      : _buildPlaceholderCover(context, size: 50),
                                 ),
                                 title: Text(
                                   music.title,
@@ -121,6 +127,16 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// 占位封面图
+  Widget _buildPlaceholderCover(BuildContext context, {required double size}) {
+    return Container(
+      width: size,
+      height: size,
+      color: Colors.grey[300],
+      child: const Icon(Icons.music_note, color: Colors.grey),
+    );
+  }
+
   /// 底部迷你播放器
   Widget _buildMiniPlayer(BuildContext context, PlayerProvider player) {
     return GestureDetector(
@@ -136,8 +152,14 @@ class _HomePageState extends State<HomePage> {
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: player.currentMusic?.coverUrl != null
-                  ? Image.network(player.currentMusic!.coverUrl!, width: 40, height: 40, fit: BoxFit.cover)
-                  : Container(width: 40, height: 40, color: Colors.grey[300]),
+                  ? Image.network(
+                      player.currentMusic!.coverUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildPlaceholderCover(context, size: 40),
+                    )
+                  : _buildPlaceholderCover(context, size: 40),
             ),
             const SizedBox(width: 12),
             Expanded(
