@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:flutter/services.dart';
 import '../models/music.dart';
 import '../services/database_service.dart';
 
@@ -58,7 +59,23 @@ class PlayerProvider with ChangeNotifier {
     final music = _playlist[index];
     
     try {
-      await _audioPlayer.setFilePath(music.path);
+      // 【核心修复】通过原生层获取可播放的 Uri
+      String? uriString;
+      try {
+        uriString = await const MethodChannel('com.example.asmr_club_client/path_resolver')
+            .invokeMethod<String>('getPlayableUri', {'path': music.path});
+      } catch (e) {
+        print('获取 URI 失败: $e');
+      }
+
+      if (uriString != null && uriString.isNotEmpty) {
+        // 如果是 content:// URI，使用 AudioSource.uri
+        await _audioPlayer.setAudioSource(AudioSource.uri(Uri.parse(uriString)));
+      } else {
+        // 否则使用本地文件路径
+        await _audioPlayer.setFilePath(music.path);
+      }
+      
       await _audioPlayer.play();
     } catch (e) {
       print('播放失败: $e');

@@ -32,6 +32,10 @@ class MainActivity : FlutterActivity() {
                     val path = call.argument<String>("path")
                     result.success(readEntryJsonNative(path))
                 }
+                "getPlayableUri" -> {
+                    val path = call.argument<String>("path")
+                    result.success(getPlayableUri(path))
+                }
                 else -> result.notImplemented()
             }
         }
@@ -96,6 +100,30 @@ class MainActivity : FlutterActivity() {
             e.printStackTrace()
         }
         return resultList
+    }
+
+    private fun getPlayableUri(path: String?): String? {
+        if (path.isNullOrEmpty()) return null
+        // 尝试通过 SAF 获取可播放的 Uri
+        if (savedDirUri != null) {
+            try {
+                val rootPath = resolveRealPath(savedDirUri!!)
+                if (rootPath != null && path.startsWith(rootPath)) {
+                    val relativePath = path.substring(rootPath.length).trim('/')
+                    var currentDoc = DocumentFile.fromTreeUri(this, savedDirUri!!)
+                    for (part in relativePath.split('/')) {
+                        currentDoc = currentDoc?.findFile(part)
+                    }
+                    if (currentDoc != null) {
+                        return currentDoc.uri.toString()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        // 兜底：返回原始路径
+        return path
     }
 
     private fun readEntryJsonNative(path: String?): String? {
