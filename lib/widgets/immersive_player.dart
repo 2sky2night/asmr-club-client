@@ -15,6 +15,7 @@ class ImmersivePlayer extends StatelessWidget {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           color: Theme.of(context).scaffoldBackgroundColor,
+          padding: const EdgeInsets.only(bottom: 80),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -97,41 +98,67 @@ class ImmersivePlayer extends StatelessWidget {
                 },
               ),
               
-              const SizedBox(height: 20),
+              const SizedBox(height: 32),
               
-              // 控制按钮
+              // 控制按钮区域
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // 播放模式按钮
+                  SizedBox(
+                    width: 48,
+                    child: IconButton(
+                      icon: Icon(
+                        _getPlayModeIcon(player.playMode),
+                        size: 24,
+                        color: Theme.of(context).iconTheme.color,
+                      ),
+                      onPressed: player.togglePlayMode,
+                    ),
+                  ),
+                  
+                  // 上一首
                   IconButton(
-                    iconSize: 32,
-                    icon: const Icon(Icons.skip_previous),
+                    iconSize: 36,
+                    icon: const Icon(Icons.skip_previous_rounded),
                     onPressed: player.playPrevious,
                   ),
-                  const SizedBox(width: 20),
-                  IconButton(
-                    iconSize: 56,
-                    icon: Icon(player.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                    onPressed: player.togglePlayPause,
+                  
+                  // 播放/暂停（主按钮）
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.primary,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      iconSize: 48,
+                      icon: Icon(
+                        player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                      ),
+                      onPressed: player.togglePlayPause,
+                    ),
                   ),
-                  const SizedBox(width: 20),
+                  
+                  // 下一首
                   IconButton(
-                    iconSize: 32,
-                    icon: const Icon(Icons.skip_next),
+                    iconSize: 36,
+                    icon: const Icon(Icons.skip_next_rounded),
                     onPressed: player.playNext,
                   ),
+                  
+                  // 占位（保持对称）
+                  const SizedBox(width: 48),
                 ],
               ),
-              
-              const SizedBox(height: 20),
-              
-              // 播放模式
-              IconButton(
-                icon: Icon(_getPlayModeIcon(player.playMode)),
-                onPressed: player.togglePlayMode,
-              ),
-              
-              const SizedBox(height: 40),
             ],
           ),
         );
