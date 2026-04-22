@@ -184,4 +184,7 @@ flutter build apk --release
 
 # 安装 APK 到设备
 adb install app-release.apk
+
+# 调试连接设备（适合真机无法开启 USB 安装）
+adb -s 设备id logcat | Select-String "flutter"
 ```
