@@ -6,7 +6,7 @@
 
 | 首页（播放列表）                                             | 沉浸式播放器                                                 | 设置界面                                                     | 音频导入                                                     |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| <img src="./docs/screenshots/Snipaste_2026-04-22_22-02-51.png" alt="Snipaste_2026-04-22_22-02-51" style="zoom:30%;" /> | <img src="./docs/screenshots/Snipaste_2026-04-22_22-04-57.png" alt="Snipaste_2026-04-22_22-04-57" style="zoom:30%;" /> | <img src="./docs/screenshots/Snipaste_2026-04-22_22-02-58.png" alt="Snipaste_2026-04-22_22-02-58" style="zoom:30%;" /> | <img src="./docs/screenshots/Snipaste_2026-04-22_22-04-42.png" alt="Snipaste_2026-04-22_22-04-42" style="zoom:30%;" /> |
+| <img src="https://raw.githubusercontent.com/2sky2night/asmr-club-client/main/docs/screenshots/Snipaste_2026-04-22_22-02-51.png" alt="首页" style="zoom:33%;" /> | <img src="https://raw.githubusercontent.com/2sky2night/asmr-club-client/main/docs/screenshots/Snipaste_2026-04-22_22-04-57.png" alt="播放器" style="zoom:33%;" /> | <img src="https://raw.githubusercontent.com/2sky2night/asmr-club-client/main/docs/screenshots/Snipaste_2026-04-22_22-02-58.png" alt="设置" style="zoom:33%;" /> | <img src="https://raw.githubusercontent.com/2sky2night/asmr-club-client/main/docs/screenshots/Snipaste_2026-04-22_22-04-42.png" alt="扫描" style="zoom:33%;" /> |
 
 ## ✨ 主要功能
 
