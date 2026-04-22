@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:text_scroll/text_scroll.dart';
 import '../providers/player_provider.dart';
 
 /// 沉浸式播放器组件
@@ -47,11 +48,18 @@ class ImmersivePlayer extends StatelessWidget {
               
               const SizedBox(height: 40),
               
-              // 音乐信息
-              Text(
-                music?.title ?? '未播放',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
+              // 音乐信息（标题跑马灯）
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: TextScroll(
+                  music?.title ?? '未播放',
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  mode: TextScrollMode.endless,
+                  velocity: const Velocity(pixelsPerSecond: Offset(30, 0)),
+                  delayBefore: const Duration(seconds: 2),
+                  pauseBetween: const Duration(seconds: 2),
+                  selectable: true,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
