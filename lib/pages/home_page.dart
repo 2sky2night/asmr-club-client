@@ -50,6 +50,8 @@ class _HomePageState extends State<HomePage> {
                                 ),
                                 title: Text(
                                   music.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
                                     color: isPlaying ? Theme.of(context).primaryColor : null,
