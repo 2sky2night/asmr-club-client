@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/player_provider.dart';
 import '../services/database_service.dart';
 import '../widgets/immersive_player.dart';
@@ -13,6 +14,50 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollToTop = false;
+  List<String> _searchHistories = [];
+  bool _showSearchHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _loadSearchHistories();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 加载搜索历史
+  Future<void> _loadSearchHistories() async {
+    final histories = await DatabaseService().getSearchHistories();
+    if (mounted) {
+      setState(() => _searchHistories = histories);
+    }
+  }
+
+  /// 监听滚动
+  void _onScroll() {
+    final showButton = _scrollController.offset > MediaQuery.of(context).size.height;
+    if (showButton != _showScrollToTop) {
+      setState(() => _showScrollToTop = showButton);
+    }
+  }
+
+  /// 滚动到顶部
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
   @override
   Widget build(BuildContext context) {
     return Consumer<PlayerProvider>(
@@ -27,30 +72,107 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          body: Stack(
-            children: [
-              // 播放列表
-              Column(
+          body: GestureDetector(
+            onTap: () {
+              // 点击空白区域时隐藏搜索历史并收起键盘
+              if (_showSearchHistory) {
+                FocusScope.of(context).unfocus();
+                setState(() => _showSearchHistory = false);
+              }
+            },
+            behavior: HitTestBehavior.translucent,
+            child: Stack(
+              children: [
+                // 播放列表
+                Column(
                 children: [
+                  // 搜索框
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: '搜索音乐名称或作者',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // 搜索确认按钮
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_forward),
+                                    onPressed: () {
+                                      final keyword = _searchController.text.trim();
+                                      if (keyword.isNotEmpty) {
+                                        player.searchPlaylist(keyword);
+                                        DatabaseService().insertSearchHistory(keyword);
+                                        _loadSearchHistories();
+                                        FocusScope.of(context).unfocus();
+                                        setState(() => _showSearchHistory = false);
+                                      }
+                                    },
+                                  ),
+                                  // 清空按钮
+                                  IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      player.clearSearch();
+                                      setState(() => _showSearchHistory = false);
+                                    },
+                                  ),
+                                ],
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      onSubmitted: (value) {
+                        // 键盘确认按钮触发搜索
+                        final keyword = value.trim();
+                        if (keyword.isNotEmpty) {
+                          player.searchPlaylist(keyword);
+                          DatabaseService().insertSearchHistory(keyword);
+                          _loadSearchHistories();
+                          FocusScope.of(context).unfocus();
+                          setState(() => _showSearchHistory = false);
+                        }
+                      },
+                      onChanged: (value) {
+                        // 只在输入不为空时显示搜索历史
+                        setState(() => _showSearchHistory = value.isEmpty);
+                      },
+                      onTap: () {
+                        if (_searchController.text.isEmpty) {
+                          setState(() => _showSearchHistory = true);
+                        }
+                      },
+                    ),
+                  ),
                   Expanded(
-                    child: player.playlist.isEmpty
+                    child: player.displayPlaylist.isEmpty
                         ? _buildEmptyState()
                         : ListView.builder(
-                            itemCount: player.playlist.length,
+                            controller: _scrollController,
+                            itemCount: player.displayPlaylist.length,
                             itemBuilder: (context, index) {
-                              final music = player.playlist[index];
-                              final isPlaying = player.currentIndex == index;
+                              final music = player.displayPlaylist[index];
+                              final originalIndex = player.playlist.indexOf(music);
+                              final isPlaying = player.currentIndex == originalIndex;
                               
                               return ListTile(
                                 leading: ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
                                   child: music.coverUrl != null && music.coverUrl!.isNotEmpty
-                                      ? Image.network(
-                                          music.coverUrl!,
+                                      ? CachedNetworkImage(
+                                          imageUrl: music.coverUrl!,
                                           width: 50,
                                           height: 50,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => _buildPlaceholderCover(context, size: 50),
+                                          placeholder: (context, url) => _buildPlaceholderCover(context, size: 50),
+                                          errorWidget: (context, url, error) => _buildPlaceholderCover(context, size: 50),
                                         )
                                       : _buildPlaceholderCover(context, size: 50),
                                 ),
@@ -77,9 +199,9 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                   ],
                                 ),
-                                onTap: () => player.playAt(index),
+                                onTap: () => player.playAt(originalIndex),
                                 onLongPress: () {
-                                  player.playAt(index);
+                                  player.playAt(originalIndex);
                                   player.toggleImmersive(true);
                                 },
                               );
@@ -93,13 +215,72 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               
+              // 搜索历史（绝对定位覆盖）
+              if (_showSearchHistory && _searchHistories.isNotEmpty)
+                Positioned(
+                  top: 70, // 搜索框下方
+                  left: 16,
+                  right: 16,
+                  child: Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _searchHistories.length,
+                        itemBuilder: (context, index) {
+                          final history = _searchHistories[index];
+                          return ListTile(
+                            leading: const Icon(Icons.history, size: 20),
+                            title: Text(history),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.north_west, size: 18),
+                              onPressed: () {
+                                _searchController.text = history;
+                                player.searchPlaylist(history);
+                                setState(() => _showSearchHistory = false);
+                              },
+                            ),
+                            onTap: () {
+                              _searchController.text = history;
+                              player.searchPlaylist(history);
+                              setState(() => _showSearchHistory = false);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              
               // 沉浸式播放器（全屏覆盖）
               if (player.isImmersive)
                 Positioned.fill(
                   child: ImmersivePlayer(),
                 ),
+              
+              // 滚动到顶部悬浮球
+              if (_showScrollToTop)
+                Positioned(
+                  right: 16,
+                  bottom: 100,
+                  child: AnimatedOpacity(
+                    opacity: _showScrollToTop ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: FloatingActionButton.small(
+                      onPressed: _scrollToTop,
+                      child: const Icon(Icons.keyboard_arrow_up),
+                    ),
+                  ),
+                ),
             ],
           ),
+        ),
         );
       },
     );
@@ -152,12 +333,13 @@ class _HomePageState extends State<HomePage> {
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: player.currentMusic?.coverUrl != null
-                  ? Image.network(
-                      player.currentMusic!.coverUrl!,
+                  ? CachedNetworkImage(
+                      imageUrl: player.currentMusic!.coverUrl!,
                       width: 40,
                       height: 40,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildPlaceholderCover(context, size: 40),
+                      placeholder: (context, url) => _buildPlaceholderCover(context, size: 40),
+                      errorWidget: (context, url, error) => _buildPlaceholderCover(context, size: 40),
                     )
                   : _buildPlaceholderCover(context, size: 40),
             ),

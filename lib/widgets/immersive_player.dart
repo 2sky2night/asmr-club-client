@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:text_scroll/text_scroll.dart';
 import '../providers/player_provider.dart';
 
@@ -28,26 +29,27 @@ class ImmersivePlayer extends StatelessWidget {
                   onPressed: () => player.toggleImmersive(false),
                 ),
               ),
-              
+                
               const Spacer(),
-              
+                
               // 封面图
               if (music?.coverUrl != null && music!.coverUrl!.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Image.network(
-                    music.coverUrl!,
+                  child: CachedNetworkImage(
+                    imageUrl: music.coverUrl!,
                     width: 280,
                     height: 280,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildPlaceholderCover(context),
+                    placeholder: (context, url) => _buildPlaceholderCover(context),
+                    errorWidget: (context, url, error) => _buildPlaceholderCover(context),
                   ),
                 )
               else
                 _buildPlaceholderCover(context),
-              
+                
               const SizedBox(height: 40),
-              
+                
               // 音乐信息（标题跑马灯）
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -66,16 +68,16 @@ class ImmersivePlayer extends StatelessWidget {
                 music?.author ?? '',
                 style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               ),
-              
+                
               const Spacer(),
-              
+                
               // 进度条
               StreamBuilder<Duration>(
                 stream: player.audioPlayer.positionStream,
                 builder: (context, snapshot) {
                   final position = snapshot.data ?? Duration.zero;
                   final duration = player.audioPlayer.duration ?? Duration.zero;
-                  
+                    
                   return Column(
                     children: [
                       SliderTheme(
@@ -105,9 +107,9 @@ class ImmersivePlayer extends StatelessWidget {
                   );
                 },
               ),
-              
+                
               const SizedBox(height: 32),
-              
+                
               // 控制按钮区域
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -125,14 +127,14 @@ class ImmersivePlayer extends StatelessWidget {
                       onPressed: player.togglePlayMode,
                     ),
                   ),
-                  
+                    
                   // 上一首
                   IconButton(
                     iconSize: 36,
                     icon: const Icon(Icons.skip_previous_rounded),
                     onPressed: player.playPrevious,
                   ),
-                  
+                    
                   // 播放/暂停（主按钮）
                   Container(
                     decoration: BoxDecoration(
@@ -155,14 +157,14 @@ class ImmersivePlayer extends StatelessWidget {
                       onPressed: player.togglePlayPause,
                     ),
                   ),
-                  
+                    
                   // 下一首
                   IconButton(
                     iconSize: 36,
                     icon: const Icon(Icons.skip_next_rounded),
                     onPressed: player.playNext,
                   ),
-                  
+                    
                   // 占位（保持对称）
                   const SizedBox(width: 48),
                 ],

@@ -20,6 +20,10 @@ class PlayerProvider with ChangeNotifier {
   int _currentIndex = -1;
   PlayMode _playMode = PlayMode.listLoop;
   bool _isImmersive = false;
+  
+  // 搜索相关状态
+  String _searchKeyword = '';
+  List<Music> _filteredPlaylist = [];
 
   // Getters
   AudioPlayer get audioPlayer => _audioPlayer;
@@ -29,6 +33,10 @@ class PlayerProvider with ChangeNotifier {
   PlayMode get playMode => _playMode;
   bool get isImmersive => _isImmersive;
   bool get isPlaying => _audioPlayer.playing;
+  
+  // 搜索相关 Getters
+  String get searchKeyword => _searchKeyword;
+  List<Music> get displayPlaylist => _searchKeyword.isEmpty ? _playlist : _filteredPlaylist;
 
   PlayerProvider() {
     _initPlayer();
@@ -155,6 +163,28 @@ class PlayerProvider with ChangeNotifier {
   /// 切换沉浸式模式
   void toggleImmersive(bool value) {
     _isImmersive = value;
+    notifyListeners();
+  }
+
+  /// 搜索播放列表
+  void searchPlaylist(String keyword) {
+    _searchKeyword = keyword.trim();
+    if (_searchKeyword.isEmpty) {
+      _filteredPlaylist = [];
+    } else {
+      final lowerKeyword = _searchKeyword.toLowerCase();
+      _filteredPlaylist = _playlist.where((music) {
+        return music.title.toLowerCase().contains(lowerKeyword) ||
+               music.author.toLowerCase().contains(lowerKeyword);
+      }).toList();
+    }
+    notifyListeners();
+  }
+
+  /// 清空搜索
+  void clearSearch() {
+    _searchKeyword = '';
+    _filteredPlaylist = [];
     notifyListeners();
   }
 

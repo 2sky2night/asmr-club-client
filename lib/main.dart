@@ -6,6 +6,7 @@ import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/scan_page.dart';
 import 'pages/about_page.dart';
+import 'pages/cache_management_page.dart';
 
 void main() {
   runApp(
@@ -32,6 +33,7 @@ class MyApp extends StatelessWidget {
         '/': (context) => const MainNavigationPage(),
         '/scan': (context) => const ScanPage(),
         '/about': (context) => const AboutPage(),
+        '/cache-management': (context) => const CacheManagementPage(),
       },
     );
   }
@@ -55,57 +57,67 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        
-        final shouldPop = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('确认退出'),
-            content: const Text('确定要退出 ASMR Club 吗？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+    return Consumer<PlayerProvider>(
+      builder: (context, player, child) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) async {
+            if (didPop) return;
+            
+            // 如果沉浸式播放器打开，关闭它
+            if (player.isImmersive) {
+              player.toggleImmersive(false);
+              return;
+            }
+            
+            final shouldPop = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('确认退出'),
+                content: const Text('确定要退出 ASMR Club 吗？'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('取消'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('确定', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('确定', style: TextStyle(color: Colors.red)),
-              ),
-            ],
+            );
+            
+            if (shouldPop == true) {
+              SystemNavigator.pop();
+            }
+          },
+          child: Scaffold(
+            body: IndexedStack(
+              index: _currentIndex,
+              children: _pages,
+            ),
+            bottomNavigationBar: BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home),
+                  label: '首页',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.settings),
+                  label: '设置',
+                ),
+              ],
+            ),
           ),
         );
-        
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
       },
-      child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
-          children: _pages,
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: '首页',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: '设置',
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

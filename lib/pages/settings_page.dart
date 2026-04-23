@@ -31,6 +31,51 @@ class SettingsPage extends StatelessWidget {
           ),
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.cached),
+            title: const Text('缓存管理'),
+            subtitle: const Text('管理应用缓存数据'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              Navigator.pushNamed(context, '/cache-management');
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('搜索历史管理'),
+            subtitle: const Text('清空搜索历史记录'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('确认清空'),
+                  content: const Text('确定要清空所有搜索历史吗？'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('取消'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('确定', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true && context.mounted) {
+                await DatabaseService().clearSearchHistories();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('搜索历史已清空')),
+                  );
+                }
+              }
+            },
+          ),
+          const Divider(),
+          ListTile(
             leading: const Icon(Icons.delete_outline),
             title: const Text('清空播放列表'),
             subtitle: const Text('删除所有已导入的音乐记录'),
