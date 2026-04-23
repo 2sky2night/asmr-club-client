@@ -19,6 +19,7 @@ class _HomePageState extends State<HomePage> {
   bool _showScrollToTop = false;
   List<String> _searchHistories = [];
   bool _showSearchHistory = false;
+  bool _isInSearchBox = false; // 标记是否在搜索框区域
 
   @override
   void initState() {
@@ -76,24 +77,28 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          body: GestureDetector(
-            onTap: () {
-              // 点击空白区域时隐藏搜索历史并收起键盘
-              if (_showSearchHistory) {
+          body: Listener(
+            onPointerDown: (event) {
+              // 点击任何区域都失去焦点（除非在搜索框内）
+              if (!_isInSearchBox) {
                 FocusScope.of(context).unfocus();
-                setState(() => _showSearchHistory = false);
+                if (_showSearchHistory) {
+                  setState(() => _showSearchHistory = false);
+                }
               }
             },
-            behavior: HitTestBehavior.translucent,
             child: Stack(
               children: [
                 // 播放列表
                 Column(
                 children: [
                   // 搜索框
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: TextField(
+                  MouseRegion(
+                    onEnter: (_) => setState(() => _isInSearchBox = true),
+                    onExit: (_) => setState(() => _isInSearchBox = false),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: '搜索音乐名称或作者',
@@ -165,6 +170,7 @@ class _HomePageState extends State<HomePage> {
                       },
                     ),
                   ),
+                  ),
                   Expanded(
                     child: player.displayPlaylist.isEmpty
                         ? _buildEmptyState(player)
@@ -213,8 +219,12 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                   ],
                                 ),
-                                onTap: () => player.playAt(originalIndex),
+                                onTap: () {
+                                  FocusScope.of(context).unfocus();
+                                  player.playAt(originalIndex);
+                                },
                                 onLongPress: () {
+                                  FocusScope.of(context).unfocus();
                                   player.playAt(originalIndex);
                                   player.toggleImmersive(true);
                                 },
