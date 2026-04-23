@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import '../services/database_service.dart';
 
 /// 缓存管理主页面
 class CacheManagementPage extends StatefulWidget {
@@ -112,6 +113,44 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     }
   }
 
+  /// 清除搜索历史
+  Future<void> _clearSearchHistory() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认清除'),
+        content: const Text('确定要清空所有搜索历史吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确定', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await DatabaseService().clearSearchHistories();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('搜索历史已清空')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('清除失败: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -140,6 +179,18 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
               // 可以跳转到更详细的图片缓存管理页面
               // 目前直接显示在列表中
             },
+          ),
+          const Divider(),
+          // 搜索历史管理
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('搜索历史'),
+            subtitle: const Text('清空搜索历史记录'),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              onPressed: _clearSearchHistory,
+              tooltip: '清空搜索历史',
+            ),
           ),
         ],
       ),
