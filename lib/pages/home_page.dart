@@ -44,7 +44,11 @@ class _HomePageState extends State<HomePage> {
 
   /// 监听滚动
   void _onScroll() {
-    final showButton = _scrollController.offset > MediaQuery.of(context).size.height;
+    final offset = _scrollController.offset;
+    final screenHeight = MediaQuery.of(context).size.height;
+    // 降低阈值：滚动超过半屏就显示按钮，提升用户体验
+    final showButton = offset > screenHeight * 0.5;
+    
     if (showButton != _showScrollToTop) {
       setState(() => _showScrollToTop = showButton);
     }
