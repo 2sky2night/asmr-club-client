@@ -109,6 +109,11 @@ class _HomePageState extends State<HomePage> {
                                         _loadSearchHistories();
                                         FocusScope.of(context).unfocus();
                                         setState(() => _showSearchHistory = false);
+                                      } else {
+                                        // 输入为空时重置搜索
+                                        player.clearSearch();
+                                        FocusScope.of(context).unfocus();
+                                        setState(() => _showSearchHistory = false);
                                       }
                                     },
                                   ),
@@ -138,6 +143,11 @@ class _HomePageState extends State<HomePage> {
                           _loadSearchHistories();
                           FocusScope.of(context).unfocus();
                           setState(() => _showSearchHistory = false);
+                        } else {
+                          // 输入为空时重置搜索
+                          player.clearSearch();
+                          FocusScope.of(context).unfocus();
+                          setState(() => _showSearchHistory = false);
                         }
                       },
                       onChanged: (value) {
@@ -153,7 +163,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   Expanded(
                     child: player.displayPlaylist.isEmpty
-                        ? _buildEmptyState()
+                        ? _buildEmptyState(player)
                         : ListView.builder(
                             controller: _scrollController,
                             itemCount: player.displayPlaylist.length,
@@ -287,22 +297,45 @@ class _HomePageState extends State<HomePage> {
   }
 
   /// 空状态提示
-  Widget _buildEmptyState() {
+  /// 空状态提示
+  Widget _buildEmptyState(PlayerProvider player) {
+    // 判断是否是搜索结果为空
+    final isSearchResult = player.searchKeyword.isNotEmpty;
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.music_off, size: 64, color: Colors.grey[400]),
+          Icon(
+            isSearchResult ? Icons.search_off : Icons.music_off,
+            size: 64,
+            color: Colors.grey[400],
+          ),
           const SizedBox(height: 16),
           Text(
-            '播放列表为空',
+            isSearchResult ? '未找到匹配的音乐' : '播放列表为空',
             style: TextStyle(fontSize: 18, color: Colors.grey[600]),
           ),
           const SizedBox(height: 8),
-          Text(
-            '请前往设置页面扫描媒体文件',
-            style: TextStyle(color: Colors.grey[500]),
-          ),
+          if (isSearchResult) ...[
+            Text(
+              '试试其他关键词',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                _searchController.clear();
+                player.clearSearch();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('重置搜索'),
+            ),
+          ] else
+            Text(
+              '请前往设置页面扫描媒体文件',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
         ],
       ),
     );
