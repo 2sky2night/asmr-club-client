@@ -6,6 +6,16 @@ import '../providers/player_provider.dart';
 import '../services/database_service.dart';
 import '../widgets/immersive_player.dart';
 
+/// 搜索建议数据类
+class SearchSuggestion {
+  final String text;
+  final SuggestionType type;
+
+  SearchSuggestion(this.text, this.type);
+}
+
+enum SuggestionType { history, music }
+
 /// 首页：包含播放列表和底部播放器
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -92,7 +102,7 @@ class _HomePageState extends State<HomePage> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: TypeAheadField<String>(
+                          child: TypeAheadField<SearchSuggestion>(
                             controller: _searchController,
                             decorationBuilder: (context, child) {
                               return Material(
@@ -116,39 +126,59 @@ class _HomePageState extends State<HomePage> {
                             emptyBuilder: (context) => const SizedBox(height: 0),
                             itemBuilder: (context, suggestion) {
                               return ListTile(
-                                leading: const Icon(Icons.history, size: 20, color: Colors.grey),
-                                title: Text(suggestion),
+                                leading: Icon(
+                                  suggestion.type == SuggestionType.history 
+                                      ? Icons.history 
+                                      : Icons.music_note,
+                                  size: 20, 
+                                  color: suggestion.type == SuggestionType.history ? Colors.grey : Theme.of(context).primaryColor,
+                                ),
+                                title: Text(suggestion.text),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                               );
                             },
                             onSelected: (suggestion) {
-                              _searchController.text = suggestion;
-                              player.searchPlaylist(suggestion);
-                              DatabaseService().insertSearchHistory(suggestion);
+                              _searchController.text = suggestion.text;
+                              player.searchPlaylist(suggestion.text);
+                              if (suggestion.type == SuggestionType.history) {
+                                DatabaseService().insertSearchHistory(suggestion.text);
+                              }
                               _loadSearchHistories();
                             },
                             suggestionsCallback: (pattern) async {
                               await Future.delayed(Duration.zero); // 确保异步执行
-                              if (pattern.isEmpty) {
-                                return _searchHistories.take(5).toList();
-                              }
                               
                               final lowerPattern = pattern.toLowerCase();
-                              
-                              // 实时匹配音乐标题和作者
-                              final matches = player.playlist.where((m) => 
-                                m.title.toLowerCase().contains(lowerPattern) ||
-                                m.author.toLowerCase().contains(lowerPattern)
-                              ).map((m) => m.title).take(5).toList();
+                              final List<SearchSuggestion> results = [];
+
+                              if (pattern.isEmpty) {
+                                // 空输入时只显示历史记录
+                                for (final h in _searchHistories.take(5)) {
+                                  results.add(SearchSuggestion(h, SuggestionType.history));
+                                }
+                                return results;
+                              }
                               
                               // 匹配历史记录
-                              final historyMatches = _searchHistories.where((h) => 
-                                h.toLowerCase().contains(lowerPattern)
-                              ).take(5).toList();
+                              for (final h in _searchHistories) {
+                                if (h.toLowerCase().contains(lowerPattern)) {
+                                  results.add(SearchSuggestion(h, SuggestionType.history));
+                                  if (results.where((r) => r.type == SuggestionType.history).length >= 5) break;
+                                }
+                              }
                               
-                              // 合并去重并保持顺序
-                              final Set<String> combined = {...historyMatches, ...matches};
-                              return combined.toList();
+                              // 实时匹配音乐标题和作者
+                              int musicCount = 0;
+                              for (final m in player.playlist) {
+                                if (m.title.toLowerCase().contains(lowerPattern) ||
+                                    m.author.toLowerCase().contains(lowerPattern)) {
+                                  results.add(SearchSuggestion(m.title, SuggestionType.music));
+                                  musicCount++;
+                                  if (musicCount >= 5) break;
+                                }
+                              }
+                              
+                              return results;
                             },
                             builder: (context, controller, focusNode) {
                               return TextField(
