@@ -1,3 +1,30 @@
+## [0.2.0] - 2026-04-24
+
+### 🚀 Features
+
+- *(home)* 实现图片缓存和播放列表搜索功能
+- *(home)* 使用TypeAheadField替换搜索框实现智能搜索建议
+- *(home)* 添加搜索建议功能支持历史记录和音乐匹配
+
+### 🐛 Bug Fixes
+
+- *(home)* 解决搜索功能和空状态显示问题
+- *(home)* 修复搜索框交互逻辑
+
+### 🚜 Refactor
+
+- *(cache)* 将搜索历史管理功能从设置页面移至缓存管理页面
+- *(home)* 优化滚动到顶部按钮显示逻辑
+
+### 📚 Documentation
+
+- *(skills)* 添加 ASMR 发布准备技能文档
+- *(skills)* 添加 Flutter 代码评审技能文档
+- *(skill)* 更新 Flutter 代码审查技能文档
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to v0.0.3 and fix network permission & image placeholder
 ## [0.0.3] - 2026-04-22
 
 ### 🚀 Features
