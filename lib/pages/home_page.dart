@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 import '../providers/player_provider.dart';
 import '../services/database_service.dart';
 import '../widgets/immersive_player.dart';
@@ -18,8 +19,6 @@ class _HomePageState extends State<HomePage> {
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToTop = false;
   List<String> _searchHistories = [];
-  bool _showSearchHistory = false;
-  bool _isInSearchBox = false; // 标记是否在搜索框区域
 
   @override
   void initState() {
@@ -79,13 +78,8 @@ class _HomePageState extends State<HomePage> {
           ),
           body: Listener(
             onPointerDown: (event) {
-              // 点击任何区域都失去焦点（除非在搜索框内）
-              if (!_isInSearchBox) {
-                FocusScope.of(context).unfocus();
-                if (_showSearchHistory) {
-                  setState(() => _showSearchHistory = false);
-                }
-              }
+              // 点击任何区域都失去焦点
+              FocusScope.of(context).unfocus();
             },
             child: Stack(
               children: [
@@ -93,83 +87,139 @@ class _HomePageState extends State<HomePage> {
                 Column(
                 children: [
                   // 搜索框
-                  MouseRegion(
-                    onEnter: (_) => setState(() => _isInSearchBox = true),
-                    onExit: (_) => setState(() => _isInSearchBox = false),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: '搜索音乐名称或作者',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // 搜索确认按钮
-                                  IconButton(
-                                    icon: const Icon(Icons.arrow_forward),
-                                    onPressed: () {
-                                      final keyword = _searchController.text.trim();
-                                      if (keyword.isNotEmpty) {
-                                        player.searchPlaylist(keyword);
-                                        DatabaseService().insertSearchHistory(keyword);
-                                        _loadSearchHistories();
-                                        FocusScope.of(context).unfocus();
-                                        setState(() => _showSearchHistory = false);
-                                      } else {
-                                        // 输入为空时重置搜索
-                                        player.clearSearch();
-                                        FocusScope.of(context).unfocus();
-                                        setState(() => _showSearchHistory = false);
-                                      }
-                                    },
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TypeAheadField<String>(
+                            controller: _searchController,
+                            decorationBuilder: (context, child) {
+                              return Material(
+                                type: MaterialType.transparency,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).cardColor,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
-                                  // 清空按钮
-                                  IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      player.clearSearch();
-                                      setState(() => _showSearchHistory = false);
-                                    },
+                                  child: child,
+                                ),
+                              );
+                            },
+                            emptyBuilder: (context) => const SizedBox(height: 0),
+                            itemBuilder: (context, suggestion) {
+                              return ListTile(
+                                leading: const Icon(Icons.history, size: 20, color: Colors.grey),
+                                title: Text(suggestion),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                              );
+                            },
+                            onSelected: (suggestion) {
+                              _searchController.text = suggestion;
+                              player.searchPlaylist(suggestion);
+                              DatabaseService().insertSearchHistory(suggestion);
+                              _loadSearchHistories();
+                            },
+                            suggestionsCallback: (pattern) async {
+                              await Future.delayed(Duration.zero); // 确保异步执行
+                              if (pattern.isEmpty) {
+                                return _searchHistories.take(5).toList();
+                              }
+                              
+                              final lowerPattern = pattern.toLowerCase();
+                              
+                              // 实时匹配音乐标题和作者
+                              final matches = player.playlist.where((m) => 
+                                m.title.toLowerCase().contains(lowerPattern) ||
+                                m.author.toLowerCase().contains(lowerPattern)
+                              ).map((m) => m.title).take(5).toList();
+                              
+                              // 匹配历史记录
+                              final historyMatches = _searchHistories.where((h) => 
+                                h.toLowerCase().contains(lowerPattern)
+                              ).take(5).toList();
+                              
+                              // 合并去重并保持顺序
+                              final Set<String> combined = {...historyMatches, ...matches};
+                              return combined.toList();
+                            },
+                            builder: (context, controller, focusNode) {
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: InputDecoration(
+                                  hintText: '搜索音乐名称或作者',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: controller.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear),
+                                          onPressed: () {
+                                            controller.clear();
+                                            player.clearSearch();
+                                          },
+                                        )
+                                      : null,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: Theme.of(context).dividerColor),
                                   ),
-                                ],
-                              )
-                            : null,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                ),
+                                onSubmitted: (value) {
+                                  final keyword = value.trim();
+                                  if (keyword.isNotEmpty) {
+                                    player.searchPlaylist(keyword);
+                                    DatabaseService().insertSearchHistory(keyword);
+                                    _loadSearchHistories();
+                                    FocusScope.of(context).unfocus();
+                                  } else {
+                                    player.clearSearch();
+                                    FocusScope.of(context).unfocus();
+                                  }
+                                },
+                              );
+                            },
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                      ),
-                      onSubmitted: (value) {
-                        // 键盘确认按钮触发搜索
-                        final keyword = value.trim();
-                        if (keyword.isNotEmpty) {
-                          player.searchPlaylist(keyword);
-                          DatabaseService().insertSearchHistory(keyword);
-                          _loadSearchHistories();
-                          FocusScope.of(context).unfocus();
-                          setState(() => _showSearchHistory = false);
-                        } else {
-                          // 输入为空时重置搜索
-                          player.clearSearch();
-                          FocusScope.of(context).unfocus();
-                          setState(() => _showSearchHistory = false);
-                        }
-                      },
-                      onChanged: (value) {
-                        // 只在输入不为空时显示搜索历史
-                        setState(() => _showSearchHistory = value.isEmpty);
-                      },
-                      onTap: () {
-                        if (_searchController.text.isEmpty) {
-                          setState(() => _showSearchHistory = true);
-                        }
-                      },
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: TextButton(
+                            onPressed: () {
+                              final keyword = _searchController.text.trim();
+                              if (keyword.isNotEmpty) {
+                                player.searchPlaylist(keyword);
+                                DatabaseService().insertSearchHistory(keyword);
+                                _loadSearchHistories();
+                                FocusScope.of(context).unfocus();
+                              } else {
+                                player.clearSearch();
+                                FocusScope.of(context).unfocus();
+                              }
+                            },
+                            child: const Text('搜索'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
                   ),
                   Expanded(
                     child: player.displayPlaylist.isEmpty
@@ -238,49 +288,6 @@ class _HomePageState extends State<HomePage> {
                     _buildMiniPlayer(context, player),
                 ],
               ),
-              
-              // 搜索历史（绝对定位覆盖）
-              if (_showSearchHistory && _searchHistories.isNotEmpty)
-                Positioned(
-                  top: 70, // 搜索框下方
-                  left: 16,
-                  right: 16,
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      constraints: const BoxConstraints(maxHeight: 200),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _searchHistories.length,
-                        itemBuilder: (context, index) {
-                          final history = _searchHistories[index];
-                          return ListTile(
-                            leading: const Icon(Icons.history, size: 20),
-                            title: Text(history),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.north_west, size: 18),
-                              onPressed: () {
-                                _searchController.text = history;
-                                player.searchPlaylist(history);
-                                setState(() => _showSearchHistory = false);
-                              },
-                            ),
-                            onTap: () {
-                              _searchController.text = history;
-                              player.searchPlaylist(history);
-                              setState(() => _showSearchHistory = false);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
               
               // 沉浸式播放器（全屏覆盖）
               if (player.isImmersive)
