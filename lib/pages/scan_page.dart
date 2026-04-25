@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/media_scanner.dart';
 
 /// 媒体扫描页面
@@ -194,7 +195,10 @@ class _ScanPageState extends State<ScanPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: Colors.white),
+                      SpinKitFadingCircle(
+                        color: Colors.white,
+                        size: 50.0,
+                      ),
                       SizedBox(height: 16),
                       Text(
                         '媒体扫描中，请勿关闭当前页面',
