@@ -34,7 +34,7 @@ class AboutPage extends StatelessWidget {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
-            Icon(Icons.headphones, size: 80, color: Theme.of(context).primaryColor),
+            Icon(Icons.headphones, size: 80, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 24),
             const Text(
               'ASMR Club',

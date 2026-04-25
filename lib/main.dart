@@ -1,20 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:audio_service/audio_service.dart';
 import 'providers/player_provider.dart';
+import 'providers/theme_provider.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/scan_page.dart';
 import 'pages/about_page.dart';
 import 'pages/cache_management_page.dart';
 
-void main() {
-  runApp(
-    ChangeNotifierProvider(
-      create: (context) => PlayerProvider(),
-      child: const MyApp(),
-    ),
-  );
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  print('[Main] Initializing app...');
+  try {
+    final player = await initAudioService();
+    print('[Main] Audio service initialized, starting app.');
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlayerProvider>.value(value: player),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: const MyApp(),
+      ),
+    );
+  } catch (e) {
+    print('[Main] Failed to initialize audio service: $e');
+    // 即使音频服务初始化失败，也尝试启动应用
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => PlayerProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: const MyApp(),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -22,18 +45,30 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ASMR Club',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const MainNavigationPage(),
-        '/scan': (context) => const ScanPage(),
-        '/about': (context) => const AboutPage(),
-        '/cache-management': (context) => const CacheManagementPage(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'ASMR Club',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+            useMaterial3: true,
+          ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.deepPurple,
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
+          ),
+          themeMode: themeProvider.themeMode,
+          initialRoute: '/',
+          routes: {
+            '/': (context) => const MainNavigationPage(),
+            '/scan': (context) => const ScanPage(),
+            '/about': (context) => const AboutPage(),
+            '/cache-management': (context) => const CacheManagementPage(),
+          },
+        );
       },
     );
   }

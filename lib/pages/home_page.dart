@@ -131,7 +131,7 @@ class _HomePageState extends State<HomePage> {
                                       ? Icons.history 
                                       : Icons.music_note,
                                   size: 20, 
-                                  color: suggestion.type == SuggestionType.history ? Colors.grey : Theme.of(context).primaryColor,
+                                  color: suggestion.type == SuggestionType.history ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.primary,
                                 ),
                                 title: Text(suggestion.text),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -282,7 +282,7 @@ class _HomePageState extends State<HomePage> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
-                                    color: isPlaying ? Theme.of(context).primaryColor : null,
+                                    color: isPlaying ? Theme.of(context).colorScheme.primary : null,
                                   ),
                                 ),
                                 subtitle: Text(music.author),
@@ -290,7 +290,7 @@ class _HomePageState extends State<HomePage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (isPlaying)
-                                      Icon(Icons.volume_up, color: Theme.of(context).primaryColor, size: 20),
+                                      Icon(Icons.volume_up, color: Theme.of(context).colorScheme.primary, size: 20),
                                     IconButton(
                                       icon: const Icon(Icons.more_vert),
                                       onPressed: () {
@@ -397,8 +397,8 @@ class _HomePageState extends State<HomePage> {
     return Container(
       width: size,
       height: size,
-      color: Colors.grey[300],
-      child: const Icon(Icons.music_note, color: Colors.grey),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 
@@ -443,7 +443,7 @@ class _HomePageState extends State<HomePage> {
                     player.currentMusic!.author,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),

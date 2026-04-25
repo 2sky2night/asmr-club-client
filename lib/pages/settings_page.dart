@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/player_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/database_service.dart';
 
 /// 设置页面
@@ -15,6 +16,20 @@ class SettingsPage extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, child) {
+              return SwitchListTile(
+                secondary: const Icon(Icons.dark_mode_outlined),
+                title: const Text('深色模式'),
+                subtitle: const Text('适配夜间使用场景'),
+                value: themeProvider.themeMode == ThemeMode.dark,
+                onChanged: (value) {
+                  themeProvider.toggleTheme(value);
+                },
+              );
+            },
+          ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.folder_open),
             title: const Text('媒体扫描'),

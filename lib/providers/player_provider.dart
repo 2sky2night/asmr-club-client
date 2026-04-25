@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/services.dart';
+import 'package:audio_service/audio_service.dart';
 import '../models/music.dart';
 import '../services/database_service.dart';
 
@@ -11,8 +12,27 @@ enum PlayMode {
   listLoop,   // 列表循环播放
 }
 
+Future<PlayerProvider> initAudioService() async {
+  print('[AudioService] Starting initialization...');
+  try {
+    final player = await AudioService.init(
+      builder: () => PlayerProvider(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.example.asmr_club_client.channel.audio',
+        androidNotificationChannelName: 'ASMR Club Playback',
+        androidNotificationOngoing: true,
+      ),
+    );
+    print('[AudioService] Initialization successful.');
+    return player;
+  } catch (e) {
+    print('[AudioService] Initialization failed: $e');
+    rethrow;
+  }
+}
+
 /// 播放器状态管理类
-class PlayerProvider with ChangeNotifier {
+class PlayerProvider extends BaseAudioHandler with ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final DatabaseService _dbService = DatabaseService();
 
@@ -45,12 +65,81 @@ class PlayerProvider with ChangeNotifier {
 
   /// 初始化播放器监听
   void _initPlayer() {
+    print('[AudioService] Initializing player listeners...');
+    
+    // 1. 立即发送一个初始的 PlaybackState，确保通知栏通道被建立
+    playbackState.add(PlaybackState(
+      controls: [
+        MediaControl.skipToPrevious,
+        MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+      systemActions: const {MediaAction.seek},
+      androidCompactActionIndices: const [0, 1, 2],
+      processingState: AudioProcessingState.idle,
+      playing: false,
+      updatePosition: Duration.zero,
+    ));
+
     _audioPlayer.playerStateStream.listen((state) {
+      print('[AudioService] Player state changed: ${state.processingState}, playing: ${state.playing}');
       if (state.processingState == ProcessingState.completed) {
         _handleSongCompleted();
       }
+      _updateMediaItem();
+      
+      playbackState.add(PlaybackState(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (state.playing) MediaControl.pause else MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+        },
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[state.processingState]!,
+        playing: state.playing,
+        updatePosition: _audioPlayer.position,
+        bufferedPosition: _audioPlayer.bufferedPosition,
+        speed: _audioPlayer.speed,
+        queueIndex: _currentIndex,
+      ));
       notifyListeners();
     });
+
+    _audioPlayer.positionStream.listen((position) {
+      playbackState.add(playbackState.value.copyWith(
+        updatePosition: position,
+      ));
+    });
+  }
+
+  /// 更新系统媒体通知栏信息
+  void _updateMediaItem() {
+    if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+      final music = _playlist[_currentIndex];
+      print('[AudioService] Updating MediaItem: ${music.title}');
+      final item = MediaItem(
+        id: music.id.toString(),
+        title: music.title,
+        artist: music.author,
+        artUri: music.coverUrl != null ? Uri.parse(music.coverUrl!) : null,
+      );
+      mediaItem.add(item);
+      // 强制触发一次 playbackState 更新，确保通知栏刷新
+      if (playbackState.value.playing) {
+        playbackState.add(playbackState.value.copyWith(
+          updatePosition: _audioPlayer.position,
+        ));
+      }
+    }
   }
 
   /// 加载播放列表
@@ -186,6 +275,44 @@ class PlayerProvider with ChangeNotifier {
     _searchKeyword = '';
     _filteredPlaylist = [];
     notifyListeners();
+  }
+
+  @override
+  Future<void> play() async {
+    print('[AudioService] Override play() called');
+    await _audioPlayer.play();
+    playbackState.add(playbackState.value.copyWith(
+      playing: true,
+      controls: [
+        MediaControl.skipToPrevious,
+        MediaControl.pause,
+        MediaControl.skipToNext,
+      ],
+    ));
+  }
+
+  @override
+  Future<void> pause() async {
+    print('[AudioService] Override pause() called');
+    await _audioPlayer.pause();
+    playbackState.add(playbackState.value.copyWith(
+      playing: false,
+      controls: [
+        MediaControl.skipToPrevious,
+        MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+    ));
+  }
+
+  @override
+  Future<void> skipToNext() async {
+    await playNext();
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    await playPrevious();
   }
 
   @override

@@ -3,14 +3,14 @@ package com.example.asmr_club_client
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import androidx.documentfile.provider.DocumentFile
 import android.content.ContentUris
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private val CHANNEL = "com.example.asmr_club_client/path_resolver"
     private val PICK_DIR_REQUEST_CODE = 1001
     private var resultCallback: MethodChannel.Result? = null

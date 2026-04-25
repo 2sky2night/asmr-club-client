@@ -66,7 +66,7 @@ class ImmersivePlayer extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 music?.author ?? '',
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
                 
               const Spacer(),
@@ -181,10 +181,10 @@ class ImmersivePlayer extends StatelessWidget {
       width: 280,
       height: 280,
       decoration: BoxDecoration(
-        color: Colors.grey[300],
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Icon(Icons.music_note, size: 100, color: Colors.grey[600]),
+      child: Icon(Icons.music_note, size: 100, color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 
