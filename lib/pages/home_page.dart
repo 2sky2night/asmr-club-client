@@ -325,8 +325,8 @@ class _HomePageState extends State<HomePage> {
                   child: ImmersivePlayer(),
                 ),
               
-              // 滚动到顶部悬浮球
-              if (_showScrollToTop)
+              // 滚动到顶部悬浮球（沉浸式模式下隐藏）
+              if (_showScrollToTop && !player.isImmersive)
                 Positioned(
                   right: 16,
                   bottom: 100,
