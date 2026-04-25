@@ -1,3 +1,30 @@
+## [unreleased]
+
+### 🚀 Features
+
+- *(core)* 更新应用版本到 0.3.0
+## [0.3.0] - 2026-04-25
+
+### 🚀 Features
+
+- *(player)* 集成系统媒体控制和深色模式
+- *(scan)* 添加加载动画提升用户体验
+
+### 🐛 Bug Fixes
+
+- *(player)* 修复沉浸式模式下滚动到顶部按钮显示问题
+
+### 🚜 Refactor
+
+- *(docs)* 更新 Flutter 代码审查技能文档
+- *(scanner)* 优化媒体扫描功能实现后台隔离处理
+
+### 📚 Documentation
+
+- *(skill)* 更新 ASMR 发布准备技能文档
+- 更新 README 文档
+- 需求 plan 文档
+- *(readme)* 更新首页和设置界面截图
 ## [0.2.0] - 2026-04-24
 
 ### 🚀 Features
@@ -25,6 +52,7 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Bump version to v0.0.3 and fix network permission & image placeholder
+- Bump version to v0.2.0
 ## [0.0.3] - 2026-04-22
 
 ### 🚀 Features
