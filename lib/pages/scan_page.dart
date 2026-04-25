@@ -64,12 +64,8 @@ class _ScanPageState extends State<ScanPage> {
     });
 
     try {
-      Map<String, int> result;
-      if (_scanType == 'bilibili') {
-        result = await _scanner.scanBilibiliCache(_selectedDirectory!);
-      } else {
-        result = {'success': 0, 'failed': 0};
-      }
+      // 调用扫描方法（内部会自动使用 compute 在后台执行扫描）
+      final result = await _scanner.scanBilibiliCache(_selectedDirectory!);
 
       if (mounted) {
         setState(() {
@@ -85,7 +81,6 @@ class _ScanPageState extends State<ScanPage> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  // 返回 true 给上一页，表示数据有更新
                   Navigator.pop(context, true); 
                 },
                 child: const Text('确定'),
@@ -108,10 +103,8 @@ class _ScanPageState extends State<ScanPage> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        return !_isScanning; // 扫描中不允许返回
-      },
+    return PopScope(
+      canPop: !_isScanning, // 扫描中不允许返回
       child: Scaffold(
         appBar: AppBar(
           title: const Text('媒体扫描'),
@@ -201,7 +194,7 @@ class _ScanPageState extends State<ScanPage> {
                       ),
                       SizedBox(height: 16),
                       Text(
-                        '媒体扫描中，请勿关闭当前页面',
+                        '正在后台处理文件，请稍候...',
                         style: TextStyle(color: Colors.white, fontSize: 16),
                       ),
                     ],

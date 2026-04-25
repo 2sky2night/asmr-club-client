@@ -10,38 +10,57 @@ class MediaScanner {
   final DatabaseService _dbService = DatabaseService();
   static const platform = MethodChannel('com.example.asmr_club_client/path_resolver');
 
-  /// 扫描 Bilibili 缓存目录
-  Future<Map<String, int>> scanBilibiliCache(String directoryPath) async {
-    print('[SCAN] 开始扫描目录: $directoryPath');
-    int successCount = 0;
-    int failedCount = 0;
+  /// 用于 compute 调用的静态扫描方法 (Isolate 兼容)
+  /// 仅负责扫描文件并返回 Music 列表，不涉及数据库操作
+  static Future<List<Music>> scanBilibiliCacheStatic(String directoryPath) async {
+    print('[SCAN-ISOLATE] 开始在后台隔离区扫描: $directoryPath');
+    
     final List<Music> musicsToInsert = [];
-    final Set<String> processedPaths = {}; // 用于内存去重
-
-    // 处理 Android Content URI 或特殊路径
-    String realPath = directoryPath;
-    if (directoryPath.startsWith('content://')) {
-      print('[SCAN] 警告: 检测到 Content URI，尝试解析...');
-    }
+    final Set<String> processedPaths = {};
 
     try {
-      await _scanDirectoryRecursive(realPath, 0, musicsToInsert, processedPaths, realPath);
+      // 调用内部递归逻辑
+      await _scanDirectoryRecursiveStatic(directoryPath, 0, musicsToInsert, processedPaths, directoryPath);
+      print('[SCAN-ISOLATE] 扫描完成，找到 ${musicsToInsert.length} 个文件');
+    } catch (e) {
+      print('[SCAN-ISOLATE] 扫描过程中发生错误: $e');
+    }
+
+    return musicsToInsert;
+  }
+
+  /// 扫描 Bilibili 缓存目录 (主线程入口)
+  Future<Map<String, int>> scanBilibiliCache(String directoryPath) async {
+    // 1. 在后台 Isolate 中执行文件扫描
+    final newMusics = await scanBilibiliCacheStatic(directoryPath);
+    
+    // 2. 在主线程中执行数据库去重和写入
+    int successCount = 0;
+    int failedCount = 0;
+    
+    try {
+      final List<Music> musicsToInsert = [];
+      for (final music in newMusics) {
+        final exists = await _dbService.isMusicExists(music.path);
+        if (!exists) {
+          musicsToInsert.add(music);
+        }
+      }
       
       if (musicsToInsert.isNotEmpty) {
         await _dbService.insertMusics(musicsToInsert);
         successCount = musicsToInsert.length;
       }
-      print('[SCAN] 扫描完成。成功: $successCount, 失败: $failedCount');
     } catch (e) {
-      print('[SCAN] 扫描过程中发生错误: $e');
-      failedCount++;
+      print('[SCAN] 数据库写入失败: $e');
+      failedCount = newMusics.length - successCount;
     }
-
+    
     return {'success': successCount, 'failed': failedCount};
   }
 
-  /// 递归扫描目录（使用原生层列出文件以绕过权限限制）
-  Future<void> _scanDirectoryRecursive(
+  /// 递归扫描目录（静态方法，支持 Isolate）
+  static Future<void> _scanDirectoryRecursiveStatic(
     String dirPath, 
     int depth, 
     List<Music> musics,
@@ -49,14 +68,14 @@ class MediaScanner {
     String rootPath,
   ) async {
     if (depth > 8) return;
-    if (!dirPath.startsWith(rootPath) || _isSystemDirectory(dirPath)) return;
+    if (!dirPath.startsWith(rootPath) || _isSystemDirectoryStatic(dirPath)) return;
 
     try {
       // 【核心修复】调用原生层获取文件列表
       final List<dynamic>? nativeFiles = await platform.invokeMethod('listFilesNative', {'path': dirPath});
       if (nativeFiles == null) return;
 
-      if (depth <= 2) print('[SCAN] 正在扫描(原生): $dirPath');
+      if (depth <= 2) print('[SCAN-ISOLATE] 正在扫描(原生): $dirPath');
 
       for (var item in nativeFiles) {
         final Map<dynamic, dynamic> fileInfo = item;
@@ -64,14 +83,13 @@ class MediaScanner {
         final bool isDir = fileInfo['isDirectory'];
 
         if (isDir) {
-          await _scanDirectoryRecursive(filePath, depth + 1, musics, processedPaths, rootPath);
+          await _scanDirectoryRecursiveStatic(filePath, depth + 1, musics, processedPaths, rootPath);
         } else {
           final lowerPath = filePath.toLowerCase();
           // 发现音频文件，尝试向上寻找 entry.json
           if (lowerPath.endsWith('.mp3') || lowerPath.endsWith('audio.m4s')) {
-            await _processAudioFileWithMeta(File(filePath), musics, processedPaths);
+            await _processAudioFileWithMetaStatic(File(filePath), musics, processedPaths);
           }
-          // 明确忽略 video.m4s 或其他非音频文件
         }
       }
     } catch (e) {
@@ -79,8 +97,8 @@ class MediaScanner {
     }
   }
 
-  /// 处理音频文件并尝试关联元数据（使用原生层读取）
-  Future<void> _processAudioFileWithMeta(File audioFile, List<Music> musics, Set<String> processedPaths) async {
+  /// 处理音频文件并尝试关联元数据（静态方法，支持 Isolate）
+  static Future<void> _processAudioFileWithMetaStatic(File audioFile, List<Music> musics, Set<String> processedPaths) async {
     final audioPath = audioFile.path;
     if (processedPaths.contains(audioPath)) return;
 
@@ -125,126 +143,21 @@ class MediaScanner {
       }
     }
 
-    // 3. 执行导入
+    // 3. 执行导入 (仅添加到列表，不检查数据库，由主线程统一处理)
     if (bestAudioPath != null && !processedPaths.contains(bestAudioPath)) {
-      final exists = await _dbService.isMusicExists(bestAudioPath);
-      if (!exists) {
-        processedPaths.add(bestAudioPath);
-        musics.add(Music(
-          title: meta?['title']?.toString() ?? path.basenameWithoutExtension(bestAudioPath),
-          path: bestAudioPath,
-          coverUrl: meta?['cover']?.toString(),
-          author: meta?['owner_name']?.toString() ?? '本地音乐',
-        ));
-        print('[SCAN] +++ 成功导入: ${path.basename(bestAudioPath)}');
-      }
+      processedPaths.add(bestAudioPath);
+      musics.add(Music(
+        title: meta?['title']?.toString() ?? path.basenameWithoutExtension(bestAudioPath),
+        path: bestAudioPath,
+        coverUrl: meta?['cover']?.toString(),
+        author: meta?['owner_name']?.toString() ?? '本地音乐',
+      ));
+      print('[SCAN] +++ 成功导入: ${path.basename(bestAudioPath)}');
     }
   }
 
-  /// 处理独立的 MP3 文件
-  Future<void> _processStandaloneMp3(File mp3File, List<Music> musics, Set<String> processedPaths) async {
-    try {
-      final audioPath = mp3File.path;
-      
-      // 内存去重
-      if (processedPaths.contains(audioPath)) return;
-
-      // 数据库去重
-      final exists = await _dbService.isMusicExists(audioPath);
-      if (!exists) {
-        processedPaths.add(audioPath);
-        musics.add(Music(
-          title: path.basenameWithoutExtension(mp3File.path), // 使用文件名作为标题
-          path: audioPath,
-          author: '本地音乐',
-        ));
-        print('[SCAN] +++ 成功导入 MP3: ${path.basename(audioPath)}');
-      } else {
-        print('[SCAN] --- 数据库已存在 MP3: ${path.basename(audioPath)}');
-      }
-    } catch (e) {
-      print('[SCAN] 💥 处理 MP3 失败: $e');
-    }
-  }
-
-  /// 处理 entry.json 文件
-  Future<void> _processEntryFile(File entryFile, List<Music> musics, Set<String> processedPaths) async {
-    try {
-      print('[SCAN] 🔍 开始解析: ${entryFile.path}');
-      final content = await entryFile.readAsString();
-      final jsonMap = jsonDecode(content) as Map<String, dynamic>;
-
-      final title = jsonMap['title']?.toString() ?? '未知标题';
-      final coverUrl = jsonMap['cover']?.toString();
-      final author = jsonMap['owner_name']?.toString() ?? '未知作者';
-
-      print('[SCAN] 🎵 标题: $title, 作者: $author');
-
-      // 尝试在同级目录或子目录查找 audio.m4s
-      String? audioPath = await _findAudioFile(entryFile.parent);
-
-      if (audioPath != null) {
-        print('[SCAN] 🎧 找到音频文件: $audioPath');
-        // 内存去重：如果这个音频路径在本次扫描中已经处理过，则跳过
-        if (processedPaths.contains(audioPath)) {
-          print('[SCAN] ⚠️ 跳过重复路径: $audioPath');
-          return;
-        }
-
-        // 数据库去重：检查是否已存在于数据库中
-        final exists = await _dbService.isMusicExists(audioPath);
-        if (!exists) {
-          processedPaths.add(audioPath);
-          musics.add(Music(
-            title: title,
-            path: audioPath,
-            coverUrl: coverUrl,
-            author: author,
-          ));
-          print('[SCAN] +++ 成功导入: $title');
-        } else {
-          print('[SCAN] --- 数据库已存在: $title');
-        }
-      } else {
-        print('[SCAN] ❌ 未找到关联的音频文件 (m4s/mp3)');
-      }
-    } catch (e) {
-      print('[SCAN] 💥 解析 entry.json 失败: $e');
-    }
-  }
-
-  /// 在目录及其子目录中查找音频文件
-  Future<String?> _findAudioFile(Directory dir, {int depth = 0}) async {
-    if (depth > 3) return null; // 限制递归深度，防止性能问题
-
-    try {
-      final entities = dir.listSync();
-      for (var entity in entities) {
-        if (entity is File) {
-          final lowerPath = entity.path.toLowerCase();
-          // 优先找 audio.m4s
-          if (lowerPath.endsWith('audio.m4s')) return entity.path;
-          // 其次找 .mp3
-          if (lowerPath.endsWith('.mp3')) return entity.path;
-        }
-      }
-
-      // 如果当前层没找到，进入子目录继续找
-      for (var entity in entities) {
-        if (entity is Directory) {
-          final result = await _findAudioFile(entity, depth: depth + 1);
-          if (result != null) return result;
-        }
-      }
-    } catch (e) {
-      // 忽略读取错误
-    }
-
-    return null;
-  }
-
-  /// 判断是否为系统敏感目录
-  bool _isSystemDirectory(String path) {
+  /// 判断是否为系统敏感目录 (静态方法)
+  static bool _isSystemDirectoryStatic(String path) {
     final lowerPath = path.toLowerCase();
     return lowerPath.startsWith('/system') ||
            lowerPath.startsWith('/proc') ||
