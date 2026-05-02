@@ -5,11 +5,6 @@ import 'package:path/path.dart' as path;
 import '../models/music.dart';
 import 'database_service.dart';
 
-// TODO 我在优化媒体扫描，但是还有一些bug，模拟器调试无问题，真机调试有问题：
-// 1. 选择目录后 点击开始，ui直接卡死
-// 2. 扫描完成后，没有读取到音频的元数据（entry.json）
-// 不过扫描确实快了很多，需要真机调试。
-
 /// 媒体扫描服务类
 class MediaScanner {
   final DatabaseService _dbService = DatabaseService();
