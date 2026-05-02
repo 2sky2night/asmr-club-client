@@ -76,9 +76,10 @@ class DatabaseService {
     );
   }
 
-  /// 批量插入音乐
+  /// 批量插入音乐（使用事务优化性能）
   Future<void> insertMusics(List<Music> musics) async {
     final db = await database;
+    // 使用 batch 进行批量操作，比逐条插入快得多
     final batch = db.batch();
     for (var music in musics) {
       batch.insert(
@@ -87,6 +88,7 @@ class DatabaseService {
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
     }
+    // noResult: true 可以减少返回数据的开销
     await batch.commit(noResult: true);
   }
 
