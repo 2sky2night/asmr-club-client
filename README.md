@@ -10,10 +10,10 @@
 
 ## ✨ 主要功能
 
-- **本地媒体扫描**：支持指定目录递归扫描，智能识别 Bilibili 缓存视频（`entry.json` + `audio.m4s`），深度限制为 2 层以优化性能。
+- **本地媒体扫描**：支持指定目录递归扫描，智能识别 Bilibili 缓存视频（`entry.json` + `audio.m4s`），深度限制为 2 层以优化性能；采用原生层批量处理与流式进度推送，实现实时可视化反馈。
 - **隐私安全优先**：采用原生路径解析方案，严格限制扫描范围，杜绝全盘扫描风险；通过 `_normalizePath` 实现路径去重。
 - **沉浸式播放**：支持底部迷你播放器与全屏沉浸式播放模式无缝切换，长标题自动跑马灯显示，音频时长智能格式化（HH:MM:SS）。
-- **持久化存储**：使用 SQLite 数据库管理播放列表，支持断点续播和列表记忆。
+- **持久化存储**：使用 SQLite 数据库管理播放列表，支持断点续播、列表记忆及后台静默写入。
 - **多格式支持**：完美支持 `.m4s` 和 `.mp3` 等主流音频格式，优先查找 `audio.m4s`，回退到 `.mp3`。
 - **智能搜索**：集成 TypeAheadField 实现智能搜索建议，支持历史记录和音乐标题/作者匹配。
 - **图片缓存**：使用 `cached_network_image` 优化封面加载体验，支持错误处理和占位图。
@@ -30,7 +30,7 @@
 - **文件处理**: file_picker, permission_handler, path_provider
 - **网络图片**: cached_network_image, flutter_cache_manager
 - **智能搜索**: flutter_typeahead
-- **原生交互**: MethodChannel (用于精准获取 Android 存储路径)
+- **原生交互**: MethodChannel & EventChannel (用于 Android 端路径解析、SAF 权限适配及实时扫描进度推送)
 - **其他工具**: url_launcher, flutter_markdown, package_info_plus, text_scroll
 
 ## 🚀 快速开始
@@ -69,14 +69,14 @@ lib/
 ├── models/                # 数据模型 (Music)
 ├── pages/                 # 页面组件
 │   ├── home_page.dart     # 首页（播放列表+迷你播放器+搜索功能）
-│   ├── scan_page.dart     # 媒体扫描页
+│   ├── scan_page.dart     # 媒体扫描页（三阶段状态：配置/实时列表/结果汇总）
 │   ├── settings_page.dart # 设置页
 │   ├── about_page.dart    # 关于页（动态版本显示）
 │   └── cache_management_page.dart # 缓存管理页（搜索历史清理）
 ├── providers/             # 状态管理 (PlayerProvider)
 ├── services/              # 业务逻辑服务
 │   ├── database_service.dart # SQLite 数据库操作
-│   └── media_scanner.dart    # 媒体文件扫描逻辑（原生层优化+路径去重）
+│   └── media_scanner.dart    # 媒体文件扫描逻辑（原生层优化+SAF 适配+流式通信）
 └── widgets/               # 通用组件
     └── immersive_player.dart # 沉浸式播放器（跑马灯标题+动画过渡）
 ```

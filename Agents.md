@@ -4,7 +4,7 @@
 **ASMR Club Client** 是一个基于 Flutter 开发的跨平台本地音乐播放器。其核心功能是扫描用户指定的本地目录，识别 Bilibili 视频缓存文件（`entry.json`），提取元数据并关联音频文件（`.m4s` 或 `.mp3`）进行播放。
 
 - **核心理念**：隐私优先（不强制全盘扫描）、简洁原生 UI、支持跨平台。
-- **当前状态**：已完成基础扫描、SQLite 持久化存储、音频播放及关于页面动态日志加载。
+- **当前状态**：已完成基础扫描、SQLite 持久化存储、音频播放及关于页面动态日志加载；扫描功能已重构为实时流式进度展示。
 
 ## 2. 技术栈
 - **框架**: Flutter (Dart)
@@ -12,13 +12,13 @@
 - **数据库**: `sqflite` (本地音乐列表持久化)
 - **音频播放**: `just_audio` + `audio_session`
 - **文件系统**: `path_provider`, `file_picker`, `permission_handler`
-- **原生交互**: `MethodChannel` (Android 端用于解决模拟器路径解析问题)
+- **原生交互**: `MethodChannel` & `EventChannel` (Android 端用于路径解析、SAF 权限适配及实时进度推送)
 - **其他**: `url_launcher`, `flutter_markdown`, `package_info_plus`
 
 ## 3. 核心模块与逻辑
 
 ### 3.1 媒体扫描 (`lib/services/media_scanner.dart`)
-- **扫描逻辑**：递归扫描用户选定的根目录。
+- **架构优化**：将核心递归逻辑迁移至 Android 原生层，通过 `MethodChannel` 批量请求和 `EventChannel` 流式推送实现高性能通信。
 - **识别规则**：
   1. 寻找名为 `entry.json` 的文件。
   2. 解析 JSON 获取标题 (`title`) 和作者 (`owner_name`)。
@@ -28,6 +28,7 @@
      - 若仍未找到，进入子目录（深度限制为 2）查找 `audio.m4s` 或 `.mp3`。
 - **去重机制**：通过规范化文件路径（`_normalizePath`）在内存和数据库层面进行双重去重。
 - **隐私保护**：严格校验扫描路径是否以用户选择的 `rootPath` 开头，防止跳出指定目录。
+- **性能保障**：使用线程池并行处理元数据读取，并通过 SAF (Storage Access Framework) 绕过 Android 11+ 的权限限制。
 
 ### 3.2 音频播放 (`lib/providers/player_provider.dart`)
 - 使用 `AudioPlayer` 实例管理播放状态。
@@ -41,8 +42,10 @@
 - 提供增删改查接口，确保应用重启后播放列表不丢失。
 
 ### 3.4 原生适配 (`android/app/src/main/kotlin/.../MainActivity.kt`)
-- 实现了自定义 `MethodChannel` (`com.example.asmr_club_client/path_resolver`)。
-- **作用**：在 Android 端将 SAF (Storage Access Framework) 的 URI 转换为真实的文件系统路径，解决部分模拟器/真机上 `file_picker` 返回路径不可用的问题。
+- **双通道通信**：
+  - `MethodChannel`: 负责发起扫描指令并返回最终统计结果。
+  - `EventChannel`: 负责在后台线程中实时推送每发现一个音频文件的元数据，驱动 UI 实时更新。
+- **SAF 适配**：利用 `DocumentFile` 和 `ContentResolver` 解决真机环境下深层目录访问的 `EACCES` 错误。
 
 ### 3.5 沉浸式播放器 (`lib/widgets/immersive_player.dart`)
 - **跑马灯标题**：长标题自动滚动显示，支持手动拖拽交互。
