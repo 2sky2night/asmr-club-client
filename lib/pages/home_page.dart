@@ -79,12 +79,6 @@ class _HomePageState extends State<HomePage> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('ASMR Club'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => player.loadPlaylist(),
-              ),
-            ],
           ),
           body: Listener(
             onPointerDown: (event) {
