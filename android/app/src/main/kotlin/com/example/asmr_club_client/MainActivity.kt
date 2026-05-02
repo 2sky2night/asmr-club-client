@@ -9,12 +9,19 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import androidx.documentfile.provider.DocumentFile
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 class MainActivity : AudioServiceActivity() {
     private val CHANNEL = "com.example.asmr_club_client/path_resolver"
     private val PICK_DIR_REQUEST_CODE = 1001
     private var resultCallback: MethodChannel.Result? = null
     private var savedDirUri: Uri? = null // 保存用户选择的目录 URI
+    // 【性能优化】使用线程池并行处理耗时的 SAF 读取操作
+    private val executor = Executors.newFixedThreadPool(4)
+    // 【性能优化】缓存 DocumentFile 引用，避免重复进行耗时的路径解析
+    private val docFileCache = mutableMapOf<String, DocumentFile?>()
+    // 【核心优化】缓存目录级别的元数据，避免重复读取 entry.json
+    private val metaCache = mutableMapOf<String, Map<String, Any>>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -55,6 +62,7 @@ class MainActivity : AudioServiceActivity() {
         if (rootPath.isNullOrEmpty()) return emptyList()
         val resultList = mutableListOf<Map<String, Any>>()
         val processedPaths = mutableSetOf<String>()
+        docFileCache.clear() // 每次扫描前清空缓存
         
         try {
             val rootFile = File(rootPath)
@@ -73,26 +81,77 @@ class MainActivity : AudioServiceActivity() {
         rootPath: String,
         resultList: MutableList<Map<String, Any>>,
         processedPaths: MutableSet<String>,
-        depth: Int
+        depth: Int,
+        currentDoc: DocumentFile? = null // 【核心优化】传入当前目录的 SAF 引用
     ) {
         if (depth > 8) return
         
+        // 1. 尝试获取当前目录的 SAF 引用（如果上层没传下来，则尝试从缓存或根路径解析）
+        var docForThisDir = currentDoc
+        if (docForThisDir == null && savedDirUri != null) {
+            val dirPath = dir.absolutePath
+            if (docFileCache.containsKey(dirPath)) {
+                docForThisDir = docFileCache[dirPath]
+            } else {
+                // 兜底：通过路径解析（仅在没有引用时发生）
+                val rootPathResolved = resolveRealPath(savedDirUri!!)
+                if (rootPathResolved != null && dirPath.startsWith(rootPathResolved)) {
+                    val relativePath = dirPath.substring(rootPathResolved.length).trim('/')
+                    var tempDoc = DocumentFile.fromTreeUri(this, savedDirUri!!)
+                    for (part in relativePath.split('/')) {
+                        tempDoc = tempDoc?.findFile(part)
+                    }
+                    docForThisDir = tempDoc
+                    if (docForThisDir != null) docFileCache[dirPath] = docForThisDir
+                }
+            }
+        }
+
+        // 2. 利用 SAF 引用直接读取 entry.json（极速）
+        if (docForThisDir != null) {
+            val entryDoc = docForThisDir.findFile("entry.json")
+            if (entryDoc != null && entryDoc.canRead()) {
+                try {
+                    val inputStream = contentResolver.openInputStream(entryDoc.uri)
+                    val content = inputStream?.bufferedReader()?.use { it.readText() }
+                    inputStream?.close()
+                    
+                    if (content != null && content.isNotEmpty()) {
+                        val json = JSONObject(content)
+                        val title = json.optString("title")
+                        if (title.isNotEmpty()) {
+                            metaCache[dir.absolutePath] = mapOf(
+                                "title" to title,
+                                "owner_name" to json.optString("owner_name"),
+                                "cover" to json.optString("cover")
+                            )
+                        }
+                    }
+                } catch (e: Exception) { /* ignore */ }
+            }
+        }
+
         val files = dir.listFiles() ?: return
         for (file in files) {
             if (file.isDirectory) {
                 if (file.absolutePath.startsWith(rootPath) && !isSystemDirectory(file.absolutePath)) {
-                    scanDirectoryRecursive(file, rootPath, resultList, processedPaths, depth + 1)
+                    // 3. 递归时，将子目录的 DocumentFile 引用传下去
+                    val childDoc = docForThisDir?.findFile(file.name)
+                    scanDirectoryRecursive(file, rootPath, resultList, processedPaths, depth + 1, childDoc)
                 }
             } else {
                 val lowerName = file.name.lowercase()
                 if (lowerName.endsWith(".mp3") || lowerName == "audio.m4s") {
-                    processAudioFileWithMeta(file, resultList, processedPaths)
+                    processAudioFileWithMetaFast(file, resultList, processedPaths)
                 }
             }
         }
     }
 
-    private fun processAudioFileWithMeta(
+    /**
+     * 快速处理音频文件，直接从内存缓存获取元数据
+     */
+    private fun processAudioFileWithMetaFast(
         audioFile: File,
         resultList: MutableList<Map<String, Any>>,
         processedPaths: MutableSet<String>
@@ -100,40 +159,10 @@ class MainActivity : AudioServiceActivity() {
         val audioPath = audioFile.absolutePath
         if (processedPaths.contains(audioPath)) return
 
-        var currentDir: File? = audioFile.parentFile
-        var meta: Map<String, Any>? = null
         var bestAudioPath: String? = null
+        var meta: Map<String, Any>? = null
 
-        // 1. 向上查找 entry.json (使用 SAF 读取以绕过权限限制)
-        for (i in 0..2) {
-            if (currentDir == null) break
-            val entryFile = File(currentDir, "entry.json")
-            if (entryFile.exists()) {
-                val content = readEntryJsonViaSAF(entryFile.absolutePath)
-                if (content != null && content.isNotEmpty()) {
-                    try {
-                        val json = JSONObject(content)
-                        val title = json.optString("title")
-                        val owner = json.optString("owner_name")
-                        val cover = json.optString("cover")
-                        
-                        if (title.isNotEmpty()) {
-                            meta = mapOf(
-                                "title" to title,
-                                "owner_name" to owner,
-                                "cover" to cover
-                            )
-                            break
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-            currentDir = currentDir.parentFile
-        }
-
-        // 2. 确定音频路径（优先级：audio.m4s > mp3）
+        // 1. 确定音频路径
         if (audioFile.name.lowercase() == "audio.m4s") {
             bestAudioPath = audioPath
         } else if (audioFile.name.lowercase().endsWith(".mp3")) {
@@ -143,50 +172,72 @@ class MainActivity : AudioServiceActivity() {
             }
         }
 
-        // 3. 添加到结果列表
-        if (bestAudioPath != null && !processedPaths.contains(bestAudioPath)) {
-            processedPaths.add(bestAudioPath)
-            val musicMap = mutableMapOf<String, Any>(
-                "path" to bestAudioPath,
-                "title" to (meta?.get("title") ?: audioFile.nameWithoutExtension),
-                "author" to (meta?.get("owner_name") ?: "本地音乐")
-            )
-            if (meta?.get("cover") is String && (meta["cover"] as String).isNotEmpty()) {
-                musicMap["cover"] = meta["cover"] as String
+        if (bestAudioPath == null) return
+
+        // 2. 从当前目录或父目录缓存中查找元数据
+        var currentDir: File? = audioFile.parentFile
+        for (i in 0..2) {
+            if (currentDir == null) break
+            val dirPath = currentDir.absolutePath
+            if (metaCache.containsKey(dirPath)) {
+                meta = metaCache[dirPath]
+                break
             }
-            resultList.add(musicMap)
+            currentDir = currentDir.parentFile
         }
+
+        // 3. 添加到结果列表
+        processedPaths.add(bestAudioPath)
+        val musicMap = mutableMapOf<String, Any>(
+            "path" to bestAudioPath,
+            "title" to (meta?.get("title") ?: audioFile.nameWithoutExtension),
+            "author" to (meta?.get("owner_name") ?: "本地音乐")
+        )
+        if (meta?.get("cover") is String && (meta["cover"] as String).isNotEmpty()) {
+            musicMap["cover"] = meta["cover"] as String
+        }
+        resultList.add(musicMap)
     }
 
+
     /**
-     * 通过 SAF (Storage Access Framework) 读取文件内容。
-     *
-     * 【关键说明】：
-     * 在 Android 11+ (API 30+) 的真机环境中，即使用户授予了 MANAGE_EXTERNAL_STORAGE 权限，
-     * 直接使用 java.io.File API (如 readText()) 访问某些特定目录（如 /storage/emulated/0/...）
-     * 下的文件时，仍可能因系统底层的 Linux 权限位限制或 Scoped Storage 策略拦截而抛出
-     * EACCES (Permission denied) 异常。
-     *
-     * 解决方案：
-     * 利用用户通过 ACTION_OPEN_DOCUMENT_TREE 授权并保存的 savedDirUri，
-     * 通过 DocumentFile 和 ContentResolver.openInputStream() 进行流式读取。
-     * 这种方式拥有系统级的持久化 URI 权限，能够稳定绕过上述文件句柄打开限制。
+     * 通过 SAF 读取文件内容，并缓存 DocumentFile 引用以加速后续查找。
      */
     private fun readEntryJsonViaSAF(absolutePath: String): String? {
         if (savedDirUri == null) return null
         
+        // 先查缓存
+        if (docFileCache.containsKey(absolutePath)) {
+            val cachedDoc = docFileCache[absolutePath]
+            if (cachedDoc != null && cachedDoc.canRead()) {
+                try {
+                    val inputStream = contentResolver.openInputStream(cachedDoc.uri)
+                    return inputStream?.bufferedReader()?.use { it.readText() }
+                } catch (e: Exception) { /* ignore */ }
+            }
+        }
+
         try {
             val rootPath = resolveRealPath(savedDirUri!!)
             if (rootPath != null && absolutePath.startsWith(rootPath)) {
                 val relativePath = absolutePath.substring(rootPath.length).trim('/')
                 var currentDoc = DocumentFile.fromTreeUri(this, savedDirUri!!)
                 
-                for (part in relativePath.split('/')) {
-                    currentDoc = currentDoc?.findFile(part)
-                    if (currentDoc == null) break
+                // 优化：尝试从父目录缓存中恢复，减少查找步数
+                val parentPath = absolutePath.substring(0, absolutePath.lastIndexOf('/'))
+                if (docFileCache.containsKey(parentPath)) {
+                    currentDoc = docFileCache[parentPath]
+                }
+
+                if (currentDoc != null) {
+                    for (part in relativePath.split('/')) {
+                        currentDoc = currentDoc?.findFile(part)
+                        if (currentDoc == null) break
+                    }
                 }
                 
                 if (currentDoc != null && currentDoc.canRead()) {
+                    docFileCache[absolutePath] = currentDoc // 存入缓存
                     val inputStream = contentResolver.openInputStream(currentDoc.uri)
                     val content = inputStream?.bufferedReader()?.use { it.readText() }
                     inputStream?.close()
