@@ -1,14 +1,35 @@
-## [unreleased]
+## [0.4.0] - 2026-05-02
 
 ### 🚀 Features
 
-- *(core)* 更新应用版本到 0.3.0
+- *(scan)* 重构扫描页面UI并实现实时进度反馈
+- *(version)* 更新版本号到0.4.0
+
+### 🚜 Refactor
+
+- *(home)* 移除首页刷新按钮
+
+### 📚 Documentation
+
+- *(release)* 添加版本发布说明模板
+- *(docs)* 更新需求说明书文档版本信息和V0.4.0功能说明
+- 更新说明文档
+
+### ⚡ Performance
+
+- *(scanner)* 优化媒体扫描性能
+- *(path_resolver)* 优化 SAF 文件读取性能
+
+### 🎨 Styling
+
+- 清除无用注释
 ## [0.3.0] - 2026-04-25
 
 ### 🚀 Features
 
 - *(player)* 集成系统媒体控制和深色模式
 - *(scan)* 添加加载动画提升用户体验
+- *(core)* 更新应用版本到 0.3.0
 
 ### 🐛 Bug Fixes
 
@@ -25,6 +46,10 @@
 - 更新 README 文档
 - 需求 plan 文档
 - *(readme)* 更新首页和设置界面截图
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to v0.3.0
 ## [0.2.0] - 2026-04-24
 
 ### 🚀 Features
