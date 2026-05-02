@@ -6,6 +6,7 @@ import android.os.Environment
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import java.io.File
 import androidx.documentfile.provider.DocumentFile
 import org.json.JSONObject
@@ -13,8 +14,10 @@ import java.util.concurrent.Executors
 
 class MainActivity : AudioServiceActivity() {
     private val CHANNEL = "com.example.asmr_club_client/path_resolver"
+    private val SCAN_EVENT_CHANNEL = "com.example.asmr_club_client/scan_progress"
     private val PICK_DIR_REQUEST_CODE = 1001
     private var resultCallback: MethodChannel.Result? = null
+    private var scanEventSink: EventChannel.EventSink? = null
     private var savedDirUri: Uri? = null // 保存用户选择的目录 URI
     // 【性能优化】使用线程池并行处理耗时的 SAF 读取操作
     private val executor = Executors.newFixedThreadPool(4)
@@ -56,6 +59,17 @@ class MainActivity : AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, SCAN_EVENT_CHANNEL).setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    scanEventSink = events
+                }
+                override fun onCancel(arguments: Any?) {
+                    scanEventSink = null
+                }
+            }
+        )
     }
 
     private fun scanBilibiliCacheNative(rootPath: String?): List<Map<String, Any>> {
@@ -186,7 +200,7 @@ class MainActivity : AudioServiceActivity() {
             currentDir = currentDir.parentFile
         }
 
-        // 3. 添加到结果列表
+        // 3. 添加到结果列表并推送进度
         processedPaths.add(bestAudioPath)
         val musicMap = mutableMapOf<String, Any>(
             "path" to bestAudioPath,
@@ -197,6 +211,11 @@ class MainActivity : AudioServiceActivity() {
             musicMap["cover"] = meta["cover"] as String
         }
         resultList.add(musicMap)
+        
+        // 【UI 优化】实时推送扫描进度到 Dart 层
+        runOnUiThread {
+            scanEventSink?.success(musicMap)
+        }
     }
 
 
